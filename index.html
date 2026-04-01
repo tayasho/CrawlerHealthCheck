@@ -412,6 +412,144 @@ header p {
   align-items: center;
   gap: 4px;
 }
+
+.detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  z-index: 200;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 48px 16px;
+  overflow-y: auto;
+  backdrop-filter: blur(4px);
+}
+
+.detail-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 900px;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.detail-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.detail-header .detail-summary {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.detail-header .detail-summary span {
+  font-family: var(--mono);
+}
+
+.detail-close {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .15s;
+  flex-shrink: 0;
+  margin-left: 16px;
+}
+
+.detail-close:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.detail-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--text-muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+
+.detail-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  vertical-align: top;
+}
+
+.detail-table tr:hover td {
+  background: rgba(255,255,255,.03);
+}
+
+.detail-table .org-name {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-table .org-name a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.detail-table .org-name a:hover {
+  text-decoration: underline;
+}
+
+.badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.badge-active {
+  background: rgba(63,185,80,.15);
+  color: var(--green-light);
+}
+
+.badge-stopped {
+  background: rgba(248,81,73,.15);
+  color: var(--red);
+}
+
+.stop-days {
+  font-family: var(--mono);
+  font-size: 12px;
+}
 </style>
 </head>
 <body>
@@ -607,6 +745,7 @@ function buildDashboard() {
     <div class="stats-bar" id="statsBar"></div>
     <div class="controls" id="controls"></div>
     <div class="grid-container" id="grid"></div>
+    <div id="detailOverlay" class="detail-overlay" style="display:none"></div>
   `;
 
   let activeOrgTypes = new Set(orgTypes);
@@ -746,7 +885,7 @@ function buildDashboard() {
     grid.innerHTML = entries.map(d => {
       const c = getColorForPct(d.pct);
       const activePct = 100 - d.pct;
-      return `<div class="cell" style="background:${c.bg};color:${c.text}">
+      return `<div class="cell" style="background:${c.bg};color:${c.text};cursor:pointer" data-country="${d.name.replace(/"/g,'&quot;')}">
         <span class="name">${d.name}</span>
         <span class="num">${d.active}/${d.total}</span>
         <div class="tooltip">
@@ -757,6 +896,120 @@ function buildDashboard() {
         </div>
       </div>`;
     }).join('');
+
+    grid.querySelectorAll('.cell[data-country]').forEach(cell => {
+      cell.addEventListener('click', () => showDetail(cell.dataset.country));
+    });
+  }
+
+  function getFilteredRows(country) {
+    return rawRows.filter(r => {
+      if ((r[colMap.country] || '').trim() !== country) return false;
+      if (colMap.orgType) {
+        const ot = (r[colMap.orgType] || '').trim();
+        if (ot && !activeOrgTypes.has(ot)) return false;
+      }
+      if (colMap.status) {
+        const st = (r[colMap.status] || '').trim();
+        if (st && !activeStatusTypes.has(st)) return false;
+      }
+      const stop = parseInt(r[colMap.stopDays]);
+      if (isNaN(stop)) return false;
+      return true;
+    });
+  }
+
+  function showDetail(country) {
+    const rows = getFilteredRows(country);
+    if (!rows.length) return;
+
+    const activeCount = rows.filter(r => parseInt(r[colMap.stopDays]) <= 0).length;
+    const stoppedCount = rows.length - activeCount;
+
+    const nameCol = headers.find(h => h.toLowerCase().includes('organization') && h.toLowerCase().includes('original')) || '';
+    const abbrCol = headers.find(h => h.toLowerCase().includes('abbreviation')) || '';
+    const jpCol = headers.find(h => h === '日本語名称') || '';
+    const freqCol = headers.find(h => h.toLowerCase().includes('update') && h.toLowerCase().includes('freq')) || headers.find(h => h === 'Update Frequency(Day)') || '';
+    const urlCol = headers.find(h => h.toLowerCase().includes('detail page url')) || '';
+    const targetCol = headers.find(h => h.toLowerCase().includes('target url')) || '';
+    const orgTypeCol = colMap.orgType;
+    const statusCol = colMap.status;
+
+    rows.sort((a, b) => parseInt(b[colMap.stopDays]) - parseInt(a[colMap.stopDays]));
+
+    let tableHTML = '<table class="detail-table"><thead><tr>';
+    tableHTML += '<th>Status</th>';
+    tableHTML += '<th>Organization</th>';
+    if (orgTypeCol) tableHTML += '<th>Type</th>';
+    tableHTML += '<th>停止日数</th>';
+    if (freqCol) tableHTML += '<th>更新頻度</th>';
+    if (statusCol) tableHTML += '<th>Publish</th>';
+    tableHTML += '<th>Target</th>';
+    tableHTML += '</tr></thead><tbody>';
+
+    rows.forEach(r => {
+      const stop = parseInt(r[colMap.stopDays]);
+      const isStopped = stop > 0;
+      const badge = isStopped
+        ? '<span class="badge badge-stopped">Stopped</span>'
+        : '<span class="badge badge-active">Active</span>';
+
+      const orgName = r[nameCol] || r[abbrCol] || r[jpCol] || '—';
+      const abbr = r[abbrCol] || '';
+      const jp = r[jpCol] || '';
+      const detailUrl = r[urlCol] || '';
+      const targetUrl = r[targetCol] || '';
+
+      let displayName = orgName;
+      if (abbr && abbr !== orgName) displayName = abbr + ' — ' + orgName;
+      const nameCell = detailUrl
+        ? '<a href="' + detailUrl + '" target="_blank" rel="noopener" title="' + (jp || orgName) + '">' + displayName + '</a>'
+        : '<span title="' + (jp || orgName) + '">' + displayName + '</span>';
+
+      tableHTML += '<tr>';
+      tableHTML += '<td>' + badge + '</td>';
+      tableHTML += '<td class="org-name">' + nameCell + '</td>';
+      if (orgTypeCol) tableHTML += '<td style="white-space:nowrap;color:var(--text-muted);font-size:12px">' + (r[orgTypeCol] || '') + '</td>';
+      tableHTML += '<td class="stop-days" style="color:' + (isStopped ? 'var(--red)' : 'var(--green-light)') + '">' + stop + '</td>';
+      if (freqCol) tableHTML += '<td style="font-family:var(--mono);font-size:12px;color:var(--text-muted)">' + (r[freqCol] || '') + 'd</td>';
+      if (statusCol) tableHTML += '<td style="font-size:12px;color:var(--text-muted)">' + (r[statusCol] || '') + '</td>';
+      tableHTML += '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+        (targetUrl ? '<a href="' + targetUrl + '" target="_blank" rel="noopener" style="color:var(--text-dim);font-size:11px">' + targetUrl.replace(/^https?:\/\//, '').slice(0, 40) + '</a>' : '') +
+        '</td>';
+      tableHTML += '</tr>';
+    });
+
+    tableHTML += '</tbody></table>';
+
+    const overlay = document.getElementById('detailOverlay');
+    overlay.style.display = 'flex';
+    overlay.innerHTML = `
+      <div class="detail-panel">
+        <div class="detail-header">
+          <div>
+            <h2>${country}</h2>
+            <div class="detail-summary">
+              <span style="color:var(--green-light)">${activeCount} active</span>
+              <span style="color:var(--red)">${stoppedCount} stopped</span>
+              <span style="color:var(--text-muted)">${rows.length} total</span>
+            </div>
+          </div>
+          <button class="detail-close" id="detailClose">&times;</button>
+        </div>
+        ${tableHTML}
+      </div>
+    `;
+
+    document.getElementById('detailClose').addEventListener('click', closeDetail);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeDetail(); });
+    document.addEventListener('keydown', escHandler);
+  }
+
+  function escHandler(e) { if (e.key === 'Escape') closeDetail(); }
+
+  function closeDetail() {
+    document.getElementById('detailOverlay').style.display = 'none';
+    document.removeEventListener('keydown', escHandler);
   }
 
   render();
