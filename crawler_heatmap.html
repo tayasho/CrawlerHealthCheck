@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crawler Status Heatmap</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #0e1117;
+  --surface: #161b22;
+  --surface-hover: #1c2333;
+  --border: rgba(255,255,255,.08);
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --text-dim: #484f58;
+  --green-bg: #0d4429;
+  --green: #3fb950;
+  --green-light: #56d364;
+  --red-bg: #5b1d24;
+  --red: #f85149;
+  --amber: #d29922;
+  --amber-bg: #4b3012;
+  --blue: #58a6ff;
+  --font: 'DM Sans', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+.app {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+header {
+  margin-bottom: 32px;
+}
+
+header h1 {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  margin-bottom: 6px;
+}
+
+header p {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 48px 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  background: var(--surface);
+  margin-bottom: 24px;
+}
+
+.drop-zone:hover, .drop-zone.dragover {
+  border-color: var(--blue);
+  background: rgba(88,166,255,.04);
+}
+
+.drop-zone svg { margin-bottom: 12px; }
+
+.drop-zone h3 {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.drop-zone p {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.drop-zone input { display: none; }
+
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.stat-card .label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.stat-card .value {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.stat-card .value.green { color: var(--green-light); }
+.stat-card .value.red { color: var(--red); }
+.stat-card .value.amber { color: var(--amber); }
+
+.controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.controls .group-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-right: 2px;
+}
+
+.pill-group {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+
+.pill:hover {
+  border-color: rgba(255,255,255,.2);
+  color: var(--text);
+}
+
+.pill.active {
+  background: rgba(88,166,255,.12);
+  border-color: rgba(88,166,255,.3);
+  color: var(--blue);
+}
+
+.separator {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  margin: 0 6px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  margin-left: auto;
+}
+
+.search-box input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 7px 0;
+  width: 160px;
+}
+
+.search-box input::placeholder { color: var(--text-dim); }
+
+.search-box svg { flex-shrink: 0; }
+
+.grid-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.cell {
+  border-radius: 6px;
+  padding: 6px 7px;
+  min-width: 62px;
+  text-align: center;
+  cursor: default;
+  position: relative;
+  transition: transform .12s, box-shadow .12s;
+  border: 1px solid transparent;
+}
+
+.cell:hover {
+  transform: scale(1.12);
+  z-index: 10;
+  box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  border-color: rgba(255,255,255,.15);
+}
+
+.cell .name {
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  max-width: 72px;
+}
+
+.cell .num {
+  font-family: var(--mono);
+  font-size: 10px;
+  opacity: .75;
+}
+
+.tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1c2333;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  text-align: left;
+}
+
+.tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgba(255,255,255,.12);
+}
+
+.cell:hover .tooltip { display: block; }
+
+.tooltip .tt-name {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: #fff;
+}
+
+.tooltip .tt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 1px 0;
+}
+
+.tooltip .tt-label { color: var(--text-muted); }
+.tooltip .tt-val { font-family: var(--mono); font-weight: 500; }
+.tooltip .tt-val.g { color: var(--green-light); }
+.tooltip .tt-val.r { color: var(--red); }
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+}
+
+.empty-state h3 { font-size: 16px; margin-bottom: 4px; }
+
+.column-mapper {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.column-mapper h3 {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+.mapper-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.mapper-field label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.mapper-field select {
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.mapper-field select:focus {
+  border-color: var(--blue);
+}
+
+.mapper-field .auto-detected {
+  font-size: 10px;
+  color: var(--green);
+  margin-top: 2px;
+}
+
+.apply-btn {
+  margin-top: 14px;
+  padding: 8px 20px;
+  background: rgba(88,166,255,.12);
+  border: 1px solid rgba(88,166,255,.3);
+  border-radius: 8px;
+  color: var(--blue);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.apply-btn:hover {
+  background: rgba(88,166,255,.2);
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+
+.file-info .filename {
+  font-family: var(--mono);
+  font-weight: 500;
+  color: var(--blue);
+}
+
+.file-info .meta {
+  color: var(--text-muted);
+}
+
+.file-info .reset-btn {
+  margin-left: auto;
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.file-info .reset-btn:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.org-filter-section {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <h1>Crawler status heatmap</h1>
+    <p>CSVをドロップして、国別クローラー稼働状況をヒートマップで可視化</p>
+  </header>
+
+  <div class="drop-zone" id="dropZone">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#484f58" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <h3>CSVファイルをドロップ or クリック</h3>
+    <p>Country, Type of Organization, 停止日数 の列が含まれるCSV</p>
+    <input type="file" id="fileInput" accept=".csv">
+  </div>
+
+  <div id="mapperSection" style="display:none"></div>
+  <div id="fileInfoSection" style="display:none"></div>
+  <div id="dashboard" style="display:none"></div>
+</div>
+
+<script>
+const COLORS = [
+  { max: 0,   bg: '#0d4429', text: '#56d364', label: '0%' },
+  { max: 15,  bg: '#17492e', text: '#6ee795', label: '~15%' },
+  { max: 25,  bg: '#2a5a2a', text: '#a3d977', label: '~25%' },
+  { max: 35,  bg: '#4b5520', text: '#c4b94d', label: '~35%' },
+  { max: 50,  bg: '#5a4318', text: '#d29922', label: '~50%' },
+  { max: 65,  bg: '#6b3420', text: '#e87a5a', label: '~65%' },
+  { max: 80,  bg: '#6e2530', text: '#f27a7a', label: '~80%' },
+  { max: 100, bg: '#5b1d24', text: '#f85149', label: '100%' },
+];
+
+function getColorForPct(pct) {
+  for (const c of COLORS) {
+    if (pct <= c.max) return c;
+  }
+  return COLORS[COLORS.length - 1];
+}
+
+let rawRows = [];
+let headers = [];
+let colMap = { country: '', orgType: '', stopDays: '' };
+let fileName = '';
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+function parseCSV(text) {
+  const rows = [];
+  let current = '';
+  let inQuotes = false;
+  const lines = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      if (inQuotes && text[i+1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if ((ch === ',' ) && !inQuotes) {
+      rows.push(current); current = '';
+    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (ch === '\r' && text[i+1] === '\n') i++;
+      rows.push(current); current = '';
+      lines.push([...rows]); rows.length = 0;
+    } else {
+      current += ch;
+    }
+  }
+  if (current || rows.length) { rows.push(current); lines.push([...rows]); }
+  return lines.filter(l => l.some(c => c.trim()));
+}
+
+function handleFile(file) {
+  fileName = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = parseCSV(e.target.result);
+    if (lines.length < 2) return;
+    headers = lines[0].map(h => h.trim());
+    rawRows = lines.slice(1).map(l => {
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = (l[i] || '').trim());
+      return obj;
+    });
+    autoDetectColumns();
+    showMapper();
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function autoDetectColumns() {
+  const lower = headers.map(h => h.toLowerCase());
+  colMap.country = headers[lower.findIndex(h => h === 'country')] || '';
+  colMap.orgType = headers[lower.findIndex(h => h.includes('type') && h.includes('org'))] || '';
+  colMap.stopDays = headers[lower.findIndex(h => h.includes('停止日数') || h === 'stop days' || h === 'stopdays')] || '';
+}
+
+function showMapper() {
+  dropZone.style.display = 'none';
+  const sec = document.getElementById('mapperSection');
+  sec.style.display = 'block';
+  const opts = h => headers.map(col => `<option value="${col}" ${col === h ? 'selected' : ''}>${col}</option>`).join('');
+  sec.innerHTML = `
+    <div class="column-mapper">
+      <h3>カラムマッピング</h3>
+      <div class="mapper-grid">
+        <div class="mapper-field">
+          <label>Country（国名）</label>
+          <select id="selCountry"><option value="">-- 選択 --</option>${opts(colMap.country)}</select>
+          ${colMap.country ? '<div class="auto-detected">auto-detected</div>' : ''}
+        </div>
+        <div class="mapper-field">
+          <label>Type of Organization</label>
+          <select id="selOrgType"><option value="">-- 選択（任意）--</option>${opts(colMap.orgType)}</select>
+          ${colMap.orgType ? '<div class="auto-detected">auto-detected</div>' : ''}
+        </div>
+        <div class="mapper-field">
+          <label>停止日数</label>
+          <select id="selStopDays"><option value="">-- 選択 --</option>${opts(colMap.stopDays)}</select>
+          ${colMap.stopDays ? '<div class="auto-detected">auto-detected</div>' : ''}
+        </div>
+      </div>
+      <button class="apply-btn" id="applyBtn">適用してヒートマップを表示</button>
+    </div>
+  `;
+  document.getElementById('applyBtn').addEventListener('click', () => {
+    colMap.country = document.getElementById('selCountry').value;
+    colMap.orgType = document.getElementById('selOrgType').value;
+    colMap.stopDays = document.getElementById('selStopDays').value;
+    if (!colMap.country || !colMap.stopDays) {
+      alert('Country と 停止日数 は必須です');
+      return;
+    }
+    sec.style.display = 'none';
+    buildDashboard();
+  });
+}
+
+function buildDashboard() {
+  const fileInfoSec = document.getElementById('fileInfoSection');
+  fileInfoSec.style.display = 'block';
+  fileInfoSec.innerHTML = `
+    <div class="file-info">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span class="filename">${fileName}</span>
+      <span class="meta">${rawRows.length} rows</span>
+      <button class="reset-btn" id="resetBtn">リセット</button>
+    </div>
+  `;
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    fileInfoSec.style.display = 'none';
+    document.getElementById('dashboard').style.display = 'none';
+    dropZone.style.display = '';
+    fileInput.value = '';
+  });
+
+  const orgTypes = new Set();
+  if (colMap.orgType) {
+    rawRows.forEach(r => {
+      const v = (r[colMap.orgType] || '').trim();
+      if (v) orgTypes.add(v);
+    });
+  }
+
+  const dash = document.getElementById('dashboard');
+  dash.style.display = 'block';
+  dash.innerHTML = `
+    <div class="stats-bar" id="statsBar"></div>
+    <div class="controls" id="controls"></div>
+    <div class="grid-container" id="grid"></div>
+  `;
+
+  let activeOrgTypes = new Set(orgTypes);
+  let sortBy = 'total';
+  let searchQuery = '';
+
+  function compute() {
+    const countryMap = {};
+    rawRows.forEach(r => {
+      const country = (r[colMap.country] || '').trim();
+      if (!country) return;
+      if (colMap.orgType) {
+        const ot = (r[colMap.orgType] || '').trim();
+        if (ot && !activeOrgTypes.has(ot)) return;
+      }
+      const stop = parseInt(r[colMap.stopDays]);
+      if (isNaN(stop)) return;
+      if (!countryMap[country]) countryMap[country] = { active: 0, stopped: 0, total: 0 };
+      if (stop > 0) countryMap[country].stopped++;
+      else countryMap[country].active++;
+      countryMap[country].total++;
+    });
+    let entries = Object.entries(countryMap).map(([name, d]) => ({
+      name, ...d, pct: d.total ? Math.round(d.stopped / d.total * 100) : 0
+    }));
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      entries = entries.filter(e => e.name.toLowerCase().includes(q));
+    }
+    if (sortBy === 'total') entries.sort((a, b) => b.total - a.total);
+    else if (sortBy === 'pct') entries.sort((a, b) => b.pct - a.pct || b.stopped - a.stopped);
+    else entries.sort((a, b) => a.name.localeCompare(b.name));
+    return entries;
+  }
+
+  function render() {
+    const entries = compute();
+    const totalActive = entries.reduce((s, e) => s + e.active, 0);
+    const totalStopped = entries.reduce((s, e) => s + e.stopped, 0);
+    const totalAll = totalActive + totalStopped;
+    const overallPct = totalAll ? Math.round(totalActive / totalAll * 100) : 0;
+
+    document.getElementById('statsBar').innerHTML = `
+      <div class="stat-card"><div class="label">Countries</div><div class="value">${entries.length}</div></div>
+      <div class="stat-card"><div class="label">Crawlers</div><div class="value">${totalAll.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="label">Active</div><div class="value green">${totalActive.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="label">Stopped</div><div class="value red">${totalStopped.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="label">Active rate</div><div class="value ${overallPct >= 70 ? 'green' : overallPct >= 50 ? 'amber' : 'red'}">${overallPct}%</div></div>
+    `;
+
+    let ctrlHTML = `
+      <span class="group-label">Sort:</span>
+      <div class="pill-group">
+        <button class="pill ${sortBy==='total'?'active':''}" data-sort="total">Total</button>
+        <button class="pill ${sortBy==='pct'?'active':''}" data-sort="pct">Stopped %</button>
+        <button class="pill ${sortBy==='alpha'?'active':''}" data-sort="alpha">A → Z</button>
+      </div>
+    `;
+    if (orgTypes.size > 0) {
+      ctrlHTML += `
+        <div class="separator"></div>
+        <span class="group-label">Org type:</span>
+        <div class="pill-group org-filter-section">
+          <button class="pill org-all ${activeOrgTypes.size === orgTypes.size ? 'active' : ''}">All</button>
+          ${[...orgTypes].sort().map(t =>
+            `<button class="pill org-toggle ${activeOrgTypes.has(t)?'active':''}" data-org="${t}">${t}</button>`
+          ).join('')}
+        </div>
+      `;
+    }
+    ctrlHTML += `
+      <div class="search-box">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#484f58" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Search country..." value="${searchQuery}">
+      </div>
+    `;
+    document.getElementById('controls').innerHTML = ctrlHTML;
+
+    document.querySelectorAll('[data-sort]').forEach(btn => {
+      btn.addEventListener('click', () => { sortBy = btn.dataset.sort; render(); });
+    });
+    document.querySelectorAll('.org-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset.org;
+        if (activeOrgTypes.has(t)) activeOrgTypes.delete(t);
+        else activeOrgTypes.add(t);
+        if (activeOrgTypes.size === 0) activeOrgTypes = new Set(orgTypes);
+        render();
+      });
+    });
+    const allBtn = document.querySelector('.org-all');
+    if (allBtn) {
+      allBtn.addEventListener('click', () => { activeOrgTypes = new Set(orgTypes); render(); });
+    }
+    const searchInput = document.getElementById('searchInput');
+    searchInput.addEventListener('input', e => { searchQuery = e.target.value; render(); });
+    setTimeout(() => {
+      const si = document.getElementById('searchInput');
+      if (si && searchQuery) { si.focus(); si.setSelectionRange(si.value.length, si.value.length); }
+    }, 0);
+
+    const grid = document.getElementById('grid');
+    if (entries.length === 0) {
+      grid.innerHTML = '<div class="empty-state"><h3>No data to display</h3><p>フィルターを変更してください</p></div>';
+      return;
+    }
+    grid.innerHTML = entries.map(d => {
+      const c = getColorForPct(d.pct);
+      const activePct = 100 - d.pct;
+      return `<div class="cell" style="background:${c.bg};color:${c.text}">
+        <span class="name">${d.name}</span>
+        <span class="num">${d.active}/${d.total}</span>
+        <div class="tooltip">
+          <div class="tt-name">${d.name}</div>
+          <div class="tt-row"><span class="tt-label">Active</span><span class="tt-val g">${d.active} (${activePct}%)</span></div>
+          <div class="tt-row"><span class="tt-label">Stopped</span><span class="tt-val r">${d.stopped} (${d.pct}%)</span></div>
+          <div class="tt-row"><span class="tt-label">Total</span><span class="tt-val">${d.total}</span></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  render();
+}
+</script>
+</body>
+</html>
