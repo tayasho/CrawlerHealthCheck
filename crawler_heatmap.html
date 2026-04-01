@@ -454,7 +454,7 @@ function getColorForPct(pct) {
 
 let rawRows = [];
 let headers = [];
-let colMap = { country: '', orgType: '', stopDays: '' };
+let colMap = { country: '', orgType: '', stopDays: '', status: '' };
 let fileName = '';
 
 const dropZone = document.getElementById('dropZone');
@@ -517,6 +517,7 @@ function autoDetectColumns() {
   colMap.country = headers[lower.findIndex(h => h === 'country')] || '';
   colMap.orgType = headers[lower.findIndex(h => h.includes('type') && h.includes('org'))] || '';
   colMap.stopDays = headers[lower.findIndex(h => h.includes('停止日数') || h === 'stop days' || h === 'stopdays')] || '';
+  colMap.status = headers[lower.findIndex(h => h === 'status')] || '';
 }
 
 function showMapper() {
@@ -543,6 +544,11 @@ function showMapper() {
           <select id="selStopDays"><option value="">-- 選択 --</option>${opts(colMap.stopDays)}</select>
           ${colMap.stopDays ? '<div class="auto-detected">auto-detected</div>' : ''}
         </div>
+        <div class="mapper-field">
+          <label>Status（任意）</label>
+          <select id="selStatus"><option value="">-- 選択（任意）--</option>${opts(colMap.status)}</select>
+          ${colMap.status ? '<div class="auto-detected">auto-detected</div>' : ''}
+        </div>
       </div>
       <button class="apply-btn" id="applyBtn">適用してヒートマップを表示</button>
     </div>
@@ -551,6 +557,7 @@ function showMapper() {
     colMap.country = document.getElementById('selCountry').value;
     colMap.orgType = document.getElementById('selOrgType').value;
     colMap.stopDays = document.getElementById('selStopDays').value;
+    colMap.status = document.getElementById('selStatus').value;
     if (!colMap.country || !colMap.stopDays) {
       alert('Country と 停止日数 は必須です');
       return;
@@ -586,6 +593,14 @@ function buildDashboard() {
     });
   }
 
+  const statusTypes = new Set();
+  if (colMap.status) {
+    rawRows.forEach(r => {
+      const v = (r[colMap.status] || '').trim();
+      if (v) statusTypes.add(v);
+    });
+  }
+
   const dash = document.getElementById('dashboard');
   dash.style.display = 'block';
   dash.innerHTML = `
@@ -595,6 +610,7 @@ function buildDashboard() {
   `;
 
   let activeOrgTypes = new Set(orgTypes);
+  let activeStatusTypes = new Set(statusTypes);
   let sortBy = 'total';
   let searchQuery = '';
 
@@ -606,6 +622,10 @@ function buildDashboard() {
       if (colMap.orgType) {
         const ot = (r[colMap.orgType] || '').trim();
         if (ot && !activeOrgTypes.has(ot)) return;
+      }
+      if (colMap.status) {
+        const st = (r[colMap.status] || '').trim();
+        if (st && !activeStatusTypes.has(st)) return;
       }
       const stop = parseInt(r[colMap.stopDays]);
       if (isNaN(stop)) return;
@@ -662,6 +682,18 @@ function buildDashboard() {
         </div>
       `;
     }
+    if (statusTypes.size > 0) {
+      ctrlHTML += `
+        <div class="separator"></div>
+        <span class="group-label">Status:</span>
+        <div class="pill-group">
+          <button class="pill status-all ${activeStatusTypes.size === statusTypes.size ? 'active' : ''}">All</button>
+          ${[...statusTypes].sort().map(t =>
+            `<button class="pill status-toggle ${activeStatusTypes.has(t)?'active':''}" data-status="${t}">${t}</button>`
+          ).join('')}
+        </div>
+      `;
+    }
     ctrlHTML += `
       <div class="search-box">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#484f58" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -685,6 +717,19 @@ function buildDashboard() {
     const allBtn = document.querySelector('.org-all');
     if (allBtn) {
       allBtn.addEventListener('click', () => { activeOrgTypes = new Set(orgTypes); render(); });
+    }
+    document.querySelectorAll('.status-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset.status;
+        if (activeStatusTypes.has(t)) activeStatusTypes.delete(t);
+        else activeStatusTypes.add(t);
+        if (activeStatusTypes.size === 0) activeStatusTypes = new Set(statusTypes);
+        render();
+      });
+    });
+    const statusAllBtn = document.querySelector('.status-all');
+    if (statusAllBtn) {
+      statusAllBtn.addEventListener('click', () => { activeStatusTypes = new Set(statusTypes); render(); });
     }
     const searchInput = document.getElementById('searchInput');
     searchInput.addEventListener('input', e => { searchQuery = e.target.value; render(); });
