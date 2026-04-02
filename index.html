@@ -849,26 +849,32 @@ function buildDashboard() {
         const t = btn.dataset.org;
         if (activeOrgTypes.has(t)) activeOrgTypes.delete(t);
         else activeOrgTypes.add(t);
-        if (activeOrgTypes.size === 0) activeOrgTypes = new Set(orgTypes);
         render();
       });
     });
     const allBtn = document.querySelector('.org-all');
     if (allBtn) {
-      allBtn.addEventListener('click', () => { activeOrgTypes = new Set(orgTypes); render(); });
+      allBtn.addEventListener('click', () => {
+        if (activeOrgTypes.size === orgTypes.size) activeOrgTypes = new Set();
+        else activeOrgTypes = new Set(orgTypes);
+        render();
+      });
     }
     document.querySelectorAll('.status-toggle').forEach(btn => {
       btn.addEventListener('click', () => {
         const t = btn.dataset.status;
         if (activeStatusTypes.has(t)) activeStatusTypes.delete(t);
         else activeStatusTypes.add(t);
-        if (activeStatusTypes.size === 0) activeStatusTypes = new Set(statusTypes);
         render();
       });
     });
     const statusAllBtn = document.querySelector('.status-all');
     if (statusAllBtn) {
-      statusAllBtn.addEventListener('click', () => { activeStatusTypes = new Set(statusTypes); render(); });
+      statusAllBtn.addEventListener('click', () => {
+        if (activeStatusTypes.size === statusTypes.size) activeStatusTypes = new Set();
+        else activeStatusTypes = new Set(statusTypes);
+        render();
+      });
     }
     const searchInput = document.getElementById('searchInput');
     searchInput.addEventListener('input', e => { searchQuery = e.target.value; render(); });
