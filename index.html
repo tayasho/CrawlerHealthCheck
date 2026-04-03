@@ -592,7 +592,7 @@ function getColorForPct(pct) {
 
 let rawRows = [];
 let headers = [];
-let colMap = { country: '', orgType: '', stopDays: '', status: '' };
+let colMap = { country: '', orgType: '', stopDays: '', status: '', octoAccount: '' };
 let fileName = '';
 
 const dropZone = document.getElementById('dropZone');
@@ -636,7 +636,9 @@ function handleFile(file) {
   fileName = file.name;
   const reader = new FileReader();
   reader.onload = e => {
-    const lines = parseCSV(e.target.result);
+    let text = e.target.result;
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const lines = parseCSV(text);
     if (lines.length < 2) return;
     headers = lines[0].map(h => h.trim());
     rawRows = lines.slice(1).map(l => {
@@ -656,6 +658,7 @@ function autoDetectColumns() {
   colMap.orgType = headers[lower.findIndex(h => h.includes('type') && h.includes('org'))] || '';
   colMap.stopDays = headers[lower.findIndex(h => h.includes('停止日数') || h === 'stop days' || h === 'stopdays')] || '';
   colMap.status = headers[lower.findIndex(h => h === 'status')] || '';
+  colMap.octoAccount = headers[lower.findIndex(h => h.includes('octoparse') && h.includes('account'))] || '';
 }
 
 function showMapper() {
@@ -687,6 +690,11 @@ function showMapper() {
           <select id="selStatus"><option value="">-- 選択（任意）--</option>${opts(colMap.status)}</select>
           ${colMap.status ? '<div class="auto-detected">auto-detected</div>' : ''}
         </div>
+        <div class="mapper-field">
+          <label>Octoparse Account（任意）</label>
+          <select id="selOctoAccount"><option value="">-- 選択（任意）--</option>${opts(colMap.octoAccount)}</select>
+          ${colMap.octoAccount ? '<div class="auto-detected">auto-detected</div>' : ''}
+        </div>
       </div>
       <button class="apply-btn" id="applyBtn">適用してヒートマップを表示</button>
     </div>
@@ -696,6 +704,7 @@ function showMapper() {
     colMap.orgType = document.getElementById('selOrgType').value;
     colMap.stopDays = document.getElementById('selStopDays').value;
     colMap.status = document.getElementById('selStatus').value;
+    colMap.octoAccount = document.getElementById('selOctoAccount').value;
     if (!colMap.country || !colMap.stopDays) {
       alert('Country と 停止日数 は必須です');
       return;
@@ -739,6 +748,15 @@ function buildDashboard() {
     });
   }
 
+  const octoAccounts = new Set();
+  if (colMap.octoAccount) {
+    rawRows.forEach(r => {
+      const v = (r[colMap.octoAccount] || '').trim();
+      if (v) v.split(';').forEach(a => { const t = a.trim(); if (t) octoAccounts.add(t); });
+      else octoAccounts.add('(empty)');
+    });
+  }
+
   const dash = document.getElementById('dashboard');
   dash.style.display = 'block';
   dash.innerHTML = `
@@ -750,8 +768,10 @@ function buildDashboard() {
 
   let activeOrgTypes = new Set(orgTypes);
   let activeStatusTypes = new Set(statusTypes);
+  let activeOctoAccounts = new Set(octoAccounts);
   let sortBy = 'total';
   let searchQuery = '';
+  let orgLang = 'en';
 
   function compute() {
     const countryMap = {};
@@ -765,6 +785,12 @@ function buildDashboard() {
       if (colMap.status) {
         const st = (r[colMap.status] || '').trim();
         if (st && !activeStatusTypes.has(st)) return;
+      }
+      if (colMap.octoAccount) {
+        const raw = (r[colMap.octoAccount] || '').trim();
+        const accts = raw ? raw.split(';').map(a => a.trim()).filter(Boolean) : [];
+        if (accts.length > 0 && !accts.some(a => activeOctoAccounts.has(a))) return;
+        if (accts.length === 0 && !activeOctoAccounts.has('(empty)')) return;
       }
       const stop = parseInt(r[colMap.stopDays]);
       if (isNaN(stop)) return;
@@ -833,6 +859,26 @@ function buildDashboard() {
         </div>
       `;
     }
+    if (octoAccounts.size > 0) {
+      ctrlHTML += `
+        <div class="separator"></div>
+        <span class="group-label">Account:</span>
+        <div class="pill-group">
+          <button class="pill octo-all ${activeOctoAccounts.size === octoAccounts.size ? 'active' : ''}">All</button>
+          ${[...octoAccounts].sort().map(t =>
+            `<button class="pill octo-toggle ${activeOctoAccounts.has(t)?'active':''}" data-octo="${t}">${t}</button>`
+          ).join('')}
+        </div>
+      `;
+    }
+    ctrlHTML += `
+      <div class="separator"></div>
+      <span class="group-label">Org名:</span>
+      <div class="pill-group">
+        <button class="pill lang-toggle ${orgLang==='en'?'active':''}" data-lang="en">EN</button>
+        <button class="pill lang-toggle ${orgLang==='ja'?'active':''}" data-lang="ja">日本語</button>
+      </div>
+    `;
     ctrlHTML += `
       <div class="search-box">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#484f58" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -876,6 +922,28 @@ function buildDashboard() {
         render();
       });
     }
+    document.querySelectorAll('.octo-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset.octo;
+        if (activeOctoAccounts.has(t)) activeOctoAccounts.delete(t);
+        else activeOctoAccounts.add(t);
+        render();
+      });
+    });
+    const octoAllBtn = document.querySelector('.octo-all');
+    if (octoAllBtn) {
+      octoAllBtn.addEventListener('click', () => {
+        if (activeOctoAccounts.size === octoAccounts.size) activeOctoAccounts = new Set();
+        else activeOctoAccounts = new Set(octoAccounts);
+        render();
+      });
+    }
+    document.querySelectorAll('.lang-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        orgLang = btn.dataset.lang;
+        render();
+      });
+    });
     const searchInput = document.getElementById('searchInput');
     searchInput.addEventListener('input', e => { searchQuery = e.target.value; render(); });
     setTimeout(() => {
@@ -919,6 +987,12 @@ function buildDashboard() {
         const st = (r[colMap.status] || '').trim();
         if (st && !activeStatusTypes.has(st)) return false;
       }
+      if (colMap.octoAccount) {
+        const raw = (r[colMap.octoAccount] || '').trim();
+        const accts = raw ? raw.split(';').map(a => a.trim()).filter(Boolean) : [];
+        if (accts.length > 0 && !accts.some(a => activeOctoAccounts.has(a))) return false;
+        if (accts.length === 0 && !activeOctoAccounts.has('(empty)')) return false;
+      }
       const stop = parseInt(r[colMap.stopDays]);
       if (isNaN(stop)) return false;
       return true;
@@ -940,6 +1014,7 @@ function buildDashboard() {
     const targetCol = headers.find(h => h.toLowerCase().includes('target url')) || '';
     const orgTypeCol = colMap.orgType;
     const statusCol = colMap.status;
+    const octoCol = colMap.octoAccount;
 
     rows.sort((a, b) => parseInt(b[colMap.stopDays]) - parseInt(a[colMap.stopDays]));
 
@@ -947,6 +1022,7 @@ function buildDashboard() {
     tableHTML += '<th>Status</th>';
     tableHTML += '<th>Organization</th>';
     if (orgTypeCol) tableHTML += '<th>Type</th>';
+    if (octoCol) tableHTML += '<th>Account</th>';
     tableHTML += '<th>停止日数</th>';
     if (freqCol) tableHTML += '<th>更新頻度</th>';
     if (statusCol) tableHTML += '<th>Publish</th>';
@@ -960,22 +1036,30 @@ function buildDashboard() {
         ? '<span class="badge badge-stopped">Stopped</span>'
         : '<span class="badge badge-active">Active</span>';
 
-      const orgName = r[nameCol] || r[abbrCol] || r[jpCol] || '—';
+      const orgName = r[nameCol] || '';
       const abbr = r[abbrCol] || '';
       const jp = r[jpCol] || '';
       const detailUrl = r[urlCol] || '';
       const targetUrl = r[targetCol] || '';
 
-      let displayName = orgName;
-      if (abbr && abbr !== orgName) displayName = abbr + ' — ' + orgName;
+      let displayName;
+      let titleAttr;
+      if (orgLang === 'ja') {
+        displayName = jp || abbr || orgName || '—';
+        titleAttr = orgName || abbr;
+      } else {
+        displayName = abbr && abbr !== orgName ? abbr + ' — ' + orgName : (orgName || abbr || jp || '—');
+        titleAttr = jp || orgName;
+      }
       const nameCell = detailUrl
-        ? '<a href="' + detailUrl + '" target="_blank" rel="noopener" title="' + (jp || orgName) + '">' + displayName + '</a>'
-        : '<span title="' + (jp || orgName) + '">' + displayName + '</span>';
+        ? '<a href="' + detailUrl + '" target="_blank" rel="noopener" title="' + titleAttr + '">' + displayName + '</a>'
+        : '<span title="' + titleAttr + '">' + displayName + '</span>';
 
       tableHTML += '<tr>';
       tableHTML += '<td>' + badge + '</td>';
       tableHTML += '<td class="org-name">' + nameCell + '</td>';
       if (orgTypeCol) tableHTML += '<td style="white-space:nowrap;color:var(--text-muted);font-size:12px">' + (r[orgTypeCol] || '') + '</td>';
+      if (octoCol) tableHTML += '<td style="font-family:var(--mono);font-size:11px;color:var(--text-muted);white-space:nowrap">' + (r[octoCol] || '—') + '</td>';
       tableHTML += '<td class="stop-days" style="color:' + (isStopped ? 'var(--red)' : 'var(--green-light)') + '">' + stop + '</td>';
       if (freqCol) tableHTML += '<td style="font-family:var(--mono);font-size:12px;color:var(--text-muted)">' + (r[freqCol] || '') + 'd</td>';
       if (statusCol) tableHTML += '<td style="font-size:12px;color:var(--text-muted)">' + (r[statusCol] || '') + '</td>';
