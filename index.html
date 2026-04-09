@@ -206,6 +206,31 @@ header p {
   margin-top: 8px;
 }
 
+.grid-container.cartogram-mode {
+  display: grid;
+  grid-template-columns: repeat(30, 1fr);
+  grid-template-rows: repeat(21, 1fr);
+  gap: 2px;
+  width: 100%;
+  aspect-ratio: 30 / 11;
+}
+
+.grid-container.cartogram-mode .cell {
+  min-width: 0;
+  padding: 2px 2px;
+  grid-column: var(--gc);
+  grid-row: var(--gr);
+}
+
+.grid-container.cartogram-mode .cell .name {
+  font-size: 9px;
+  max-width: none;
+}
+
+.grid-container.cartogram-mode .cell .num {
+  font-size: 8px;
+}
+
 .cell {
   border-radius: 6px;
   padding: 6px 7px;
@@ -772,6 +797,48 @@ function buildDashboard() {
   let sortBy = 'total';
   let searchQuery = '';
   let orgLang = 'en';
+  let viewMode = 'tiles';
+
+  const TILE_COORDS = {
+    "Canada":[1,1],"USA":[1,2],"Mexico":[1,4],"Guatemala":[2,5],"Belize":[2,3],"El Salvador":[1,5],
+    "Costa Rica":[3,7],"Panama":[4,8],"Cuba":[4,3],"Jamaica":[5,4],"Dominican Republic":[6,4],
+    "Bahamas":[4,2],"Trinidad and Tobago":[7,8],"Barbados":[8,6],"Saint Lucia":[8,7],
+    "Saint Vincent and the Grenadines":[8,5],"Colombia":[5,9],"Ecuador":[5,10],"Peru":[5,11],
+    "Brazil":[8,11],"Chile":[6,13],"Argentina":[6,14],"American Samoa":[29,19],
+    "Iceland":[10,1],"Norway":[13,2],"Sweden":[14,2],"Finland":[15,2],"Denmark":[14,3],
+    "UK":[12,4],"Ireland":[11,4],"Netherlands":[13,4],"Belgium":[13,5],"Luxembourg":[12,5],
+    "France":[12,6],"Spain":[11,8],"Portugal":[11,7],"Germany":[14,5],"Switzerland":[13,6],
+    "Austria":[15,6],"Italy":[14,8],"Czech Republic":[15,5],"Poland":[16,4],"Slovakia":[16,5],
+    "Hungary":[16,6],"Slovenia":[14,7],"Croatia":[15,7],"Serbia":[16,7],"Montenegro":[15,8],
+    "North Macedonia":[16,8],"Greece":[16,9],"Romania":[17,6],"Bulgaria":[17,7],"Moldova":[18,5],
+    "Estonia":[16,2],"Latvia":[16,3],"Lithuania":[17,3],"Ukraine":[18,4],"Cyprus":[17,10],
+    "EU":[12,3],"Morocco":[12,10],"Tunisia":[14,10],"Egypt":[16,11],"Mauritania":[11,12],
+    "Senegal":[11,13],"Gambia":[10,13],"Guinea-Bissau":[10,14],"Guinea":[11,14],"Mali":[12,12],
+    "Burkina Faso":[13,13],"Ivory Coast":[12,15],"Benin":[15,14],"Nigeria":[14,13],
+    "Cameroon":[14,15],"Congo-Brazzaville":[14,16],"Congo-Kinshasa":[15,15],"South Sudan":[16,15],
+    "Djibouti":[17,13],"Kenya":[17,15],"Uganda":[16,16],"Rwanda":[15,16],"Tanzania":[16,17],
+    "Angola":[13,17],"Mozambique":[16,19],"Botswana":[15,18],"South Africa":[15,20],
+    "Swaziland":[16,20],"Cape Verde":[10,15],"Seychelles":[19,17],"Mauritius":[18,19],
+    "Turkey":[18,8],"Syria":[19,8],"Iraq":[20,8],"Iran":[21,8],"Saudi Arabia":[19,10],
+    "Oman":[21,10],"UAE":[20,10],"Qatar":[20,11],"Bahrain":[20,9],"Jordan":[18,9],
+    "Israel":[17,9],"State of Palestine":[18,10],"Georgia":[19,6],"Azerbaijan":[21,7],
+    "Kazakhstan":[22,5],"Uzbekistan":[22,6],"Turkmenistan":[21,6],"Kyrgyzstan":[23,5],
+    "Tajikistan":[23,6],"India":[22,9],"Pakistan":[21,9],"Nepal":[23,8],
+    "Bangladesh":[23,9],"Sri Lanka":[22,11],"Maldives":[21,12],"Bhutan":[24,7],
+    "Myanmar":[24,9],"Thailand":[25,9],"Laos":[25,8],"Vietnam":[26,9],"Cambodia":[25,10],
+    "Malaysia":[25,11],"Singapore":[25,12],"Indonesia":[26,13],"Philippines":[27,10],
+    "Brunei Darussalam":[26,12],"East Timor":[27,14],"Mongolia":[24,4],"China":[24,6],
+    "Japan":[27,5],"Korea":[26,5],"Taiwan":[26,7],"Hong Kong":[25,7],
+    "Australia":[24,19],"New Zealand":[26,20],"Fiji":[28,18],"Solomon Islands":[28,17],
+    "Samoa":[29,18],"Tonga":[29,19],"Kiribati":[29,16],"Tuvalu":[29,17],
+    "Marshall Islands":[29,15],"Micronesia":[28,15],"Palau":[27,13],
+    "Russia":[19,3],"Montenegro":[15,8],
+    "AFRICA":[13,19],"ASIA":[23,3],"MENA":[19,12],"Europe":[11,3],
+    "Multinational":[10,2],"Other":[9,1],"Other(ASEAN)":[26,14],"Other(ASEM)":[23,2],
+    "Other(Africa)":[12,19],"Other(Asia)":[24,3],"Other(Europe)":[11,2],
+    "Republic of Kosovo":[16,8],"Morocco":[12,10],
+    "Nepal":[23,8],"Panama":[4,7],
+  };
 
   function compute() {
     const countryMap = {};
@@ -828,11 +895,17 @@ function buildDashboard() {
     `;
 
     let ctrlHTML = `
+      <span class="group-label">View:</span>
+      <div class="pill-group">
+        <button class="pill view-toggle ${viewMode==='tiles'?'active':''}" data-view="tiles">Tiles</button>
+        <button class="pill view-toggle ${viewMode==='cartogram'?'active':''}" data-view="cartogram">Map</button>
+      </div>
+      <div class="separator"></div>
       <span class="group-label">Sort:</span>
       <div class="pill-group">
-        <button class="pill ${sortBy==='total'?'active':''}" data-sort="total">Total</button>
-        <button class="pill ${sortBy==='pct'?'active':''}" data-sort="pct">Stopped %</button>
-        <button class="pill ${sortBy==='alpha'?'active':''}" data-sort="alpha">A → Z</button>
+        <button class="pill ${sortBy==='total'?'active':''}" data-sort="total" ${viewMode==='cartogram'?'disabled style="opacity:.3;pointer-events:none"':''}>Total</button>
+        <button class="pill ${sortBy==='pct'?'active':''}" data-sort="pct" ${viewMode==='cartogram'?'disabled style="opacity:.3;pointer-events:none"':''}>Stopped %</button>
+        <button class="pill ${sortBy==='alpha'?'active':''}" data-sort="alpha" ${viewMode==='cartogram'?'disabled style="opacity:.3;pointer-events:none"':''}>A → Z</button>
       </div>
     `;
     if (orgTypes.size > 0) {
@@ -887,6 +960,9 @@ function buildDashboard() {
     `;
     document.getElementById('controls').innerHTML = ctrlHTML;
 
+    document.querySelectorAll('.view-toggle').forEach(btn => {
+      btn.addEventListener('click', () => { viewMode = btn.dataset.view; render(); });
+    });
     document.querySelectorAll('[data-sort]').forEach(btn => {
       btn.addEventListener('click', () => { sortBy = btn.dataset.sort; render(); });
     });
@@ -952,24 +1028,71 @@ function buildDashboard() {
     }, 0);
 
     const grid = document.getElementById('grid');
+    if (viewMode === 'cartogram') {
+      grid.classList.add('cartogram-mode');
+    } else {
+      grid.classList.remove('cartogram-mode');
+    }
     if (entries.length === 0) {
       grid.innerHTML = '<div class="empty-state"><h3>No data to display</h3><p>フィルターを変更してください</p></div>';
       return;
     }
-    grid.innerHTML = entries.map(d => {
-      const c = getColorForPct(d.pct);
-      const activePct = 100 - d.pct;
-      return `<div class="cell" style="background:${c.bg};color:${c.text};cursor:pointer" data-country="${d.name.replace(/"/g,'&quot;')}">
-        <span class="name">${d.name}</span>
-        <span class="num">${d.active}/${d.total}</span>
-        <div class="tooltip">
-          <div class="tt-name">${d.name}</div>
-          <div class="tt-row"><span class="tt-label">Active</span><span class="tt-val g">${d.active} (${activePct}%)</span></div>
-          <div class="tt-row"><span class="tt-label">Stopped</span><span class="tt-val r">${d.stopped} (${d.pct}%)</span></div>
-          <div class="tt-row"><span class="tt-label">Total</span><span class="tt-val">${d.total}</span></div>
-        </div>
-      </div>`;
-    }).join('');
+
+    if (viewMode === 'cartogram') {
+      const mapped = [];
+      const unmapped = [];
+      entries.forEach(d => {
+        const coord = TILE_COORDS[d.name];
+        if (coord) mapped.push({...d, col: coord[0], row: coord[1]});
+        else unmapped.push(d);
+      });
+      let html = mapped.map(d => {
+        const c = getColorForPct(d.pct);
+        const activePct = 100 - d.pct;
+        return `<div class="cell" style="background:${c.bg};color:${c.text};cursor:pointer;--gc:${d.col};--gr:${d.row}" data-country="${d.name.replace(/"/g,'&quot;')}">
+          <span class="name">${d.name}</span>
+          <span class="num">${d.active}/${d.total}</span>
+          <div class="tooltip">
+            <div class="tt-name">${d.name}</div>
+            <div class="tt-row"><span class="tt-label">Active</span><span class="tt-val g">${d.active} (${activePct}%)</span></div>
+            <div class="tt-row"><span class="tt-label">Stopped</span><span class="tt-val r">${d.stopped} (${d.pct}%)</span></div>
+            <div class="tt-row"><span class="tt-label">Total</span><span class="tt-val">${d.total}</span></div>
+          </div>
+        </div>`;
+      }).join('');
+      if (unmapped.length) {
+        html += unmapped.map(d => {
+          const c = getColorForPct(d.pct);
+          const activePct = 100 - d.pct;
+          return `<div class="cell" style="background:${c.bg};color:${c.text};cursor:pointer;--gc:auto;--gr:21" data-country="${d.name.replace(/"/g,'&quot;')}">
+            <span class="name">${d.name}</span>
+            <span class="num">${d.active}/${d.total}</span>
+            <div class="tooltip">
+              <div class="tt-name">${d.name}</div>
+              <div class="tt-row"><span class="tt-label">Active</span><span class="tt-val g">${d.active} (${activePct}%)</span></div>
+              <div class="tt-row"><span class="tt-label">Stopped</span><span class="tt-val r">${d.stopped} (${d.pct}%)</span></div>
+              <div class="tt-row"><span class="tt-label">Total</span><span class="tt-val">${d.total}</span></div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+      grid.innerHTML = html;
+    } else {
+      grid.innerHTML = entries.map(d => {
+        const c = getColorForPct(d.pct);
+        const activePct = 100 - d.pct;
+        return `<div class="cell" style="background:${c.bg};color:${c.text};cursor:pointer" data-country="${d.name.replace(/"/g,'&quot;')}">
+          <span class="name">${d.name}</span>
+          <span class="num">${d.active}/${d.total}</span>
+          <div class="tooltip">
+            <div class="tt-name">${d.name}</div>
+            <div class="tt-row"><span class="tt-label">Active</span><span class="tt-val g">${d.active} (${activePct}%)</span></div>
+            <div class="tt-row"><span class="tt-label">Stopped</span><span class="tt-val r">${d.stopped} (${d.pct}%)</span></div>
+            <div class="tt-row"><span class="tt-label">Total</span><span class="tt-val">${d.total}</span></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
 
     grid.querySelectorAll('.cell[data-country]').forEach(cell => {
       cell.addEventListener('click', () => showDetail(cell.dataset.country));
