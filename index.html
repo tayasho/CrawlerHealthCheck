@@ -617,7 +617,7 @@ function getColorForPct(pct) {
 
 let rawRows = [];
 let headers = [];
-let colMap = { country: '', orgType: '', stopDays: '', status: '', octoAccount: '' };
+let colMap = { country: '', orgType: '', stopDays: '', status: '', octoAccount: '', priority: '' };
 let fileName = '';
 
 const dropZone = document.getElementById('dropZone');
@@ -684,6 +684,7 @@ function autoDetectColumns() {
   colMap.stopDays = headers[lower.findIndex(h => h.includes('停止日数') || h === 'stop days' || h === 'stopdays')] || '';
   colMap.status = headers[lower.findIndex(h => h === 'status')] || '';
   colMap.octoAccount = headers[lower.findIndex(h => h.includes('octoparse') && h.includes('account'))] || '';
+  colMap.priority = headers[lower.findIndex(h => h === '優先度' || h === 'priority')] || '';
 }
 
 function showMapper() {
@@ -720,6 +721,11 @@ function showMapper() {
           <select id="selOctoAccount"><option value="">-- 選択（任意）--</option>${opts(colMap.octoAccount)}</select>
           ${colMap.octoAccount ? '<div class="auto-detected">auto-detected</div>' : ''}
         </div>
+        <div class="mapper-field">
+          <label>優先度（任意）</label>
+          <select id="selPriority"><option value="">-- 選択（任意）--</option>${opts(colMap.priority)}</select>
+          ${colMap.priority ? '<div class="auto-detected">auto-detected</div>' : ''}
+        </div>
       </div>
       <button class="apply-btn" id="applyBtn">適用してヒートマップを表示</button>
     </div>
@@ -730,6 +736,7 @@ function showMapper() {
     colMap.stopDays = document.getElementById('selStopDays').value;
     colMap.status = document.getElementById('selStatus').value;
     colMap.octoAccount = document.getElementById('selOctoAccount').value;
+    colMap.priority = document.getElementById('selPriority').value;
     if (!colMap.country || !colMap.stopDays) {
       alert('Country と 停止日数 は必須です');
       return;
@@ -782,6 +789,15 @@ function buildDashboard() {
     });
   }
 
+  const priorityTypes = new Set();
+  if (colMap.priority) {
+    rawRows.forEach(r => {
+      const v = (r[colMap.priority] || '').trim();
+      if (v) priorityTypes.add(v);
+      else priorityTypes.add('(empty)');
+    });
+  }
+
   const dash = document.getElementById('dashboard');
   dash.style.display = 'block';
   dash.innerHTML = `
@@ -794,6 +810,7 @@ function buildDashboard() {
   let activeOrgTypes = new Set(orgTypes);
   let activeStatusTypes = new Set(statusTypes);
   let activeOctoAccounts = new Set(octoAccounts);
+  let activePriorityTypes = new Set(priorityTypes);
   let sortBy = 'total';
   let searchQuery = '';
   let orgLang = 'en';
@@ -858,6 +875,11 @@ function buildDashboard() {
         const accts = raw ? raw.split(';').map(a => a.trim()).filter(Boolean) : [];
         if (accts.length > 0 && !accts.some(a => activeOctoAccounts.has(a))) return;
         if (accts.length === 0 && !activeOctoAccounts.has('(empty)')) return;
+      }
+      if (colMap.priority) {
+        const pr = (r[colMap.priority] || '').trim();
+        const prKey = pr || '(empty)';
+        if (!activePriorityTypes.has(prKey)) return;
       }
       const stop = parseInt(r[colMap.stopDays]);
       if (isNaN(stop)) return;
@@ -944,6 +966,18 @@ function buildDashboard() {
         </div>
       `;
     }
+    if (priorityTypes.size > 0) {
+      ctrlHTML += `
+        <div class="separator"></div>
+        <span class="group-label">優先度:</span>
+        <div class="pill-group">
+          <button class="pill prio-all ${activePriorityTypes.size === priorityTypes.size ? 'active' : ''}">All</button>
+          ${[...priorityTypes].sort().map(t =>
+            `<button class="pill prio-toggle ${activePriorityTypes.has(t)?'active':''}" data-prio="${t}">${t}</button>`
+          ).join('')}
+        </div>
+      `;
+    }
     ctrlHTML += `
       <div class="separator"></div>
       <span class="group-label">Org名:</span>
@@ -1011,6 +1045,22 @@ function buildDashboard() {
       octoAllBtn.addEventListener('click', () => {
         if (activeOctoAccounts.size === octoAccounts.size) activeOctoAccounts = new Set();
         else activeOctoAccounts = new Set(octoAccounts);
+        render();
+      });
+    }
+    document.querySelectorAll('.prio-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset.prio;
+        if (activePriorityTypes.has(t)) activePriorityTypes.delete(t);
+        else activePriorityTypes.add(t);
+        render();
+      });
+    });
+    const prioAllBtn = document.querySelector('.prio-all');
+    if (prioAllBtn) {
+      prioAllBtn.addEventListener('click', () => {
+        if (activePriorityTypes.size === priorityTypes.size) activePriorityTypes = new Set();
+        else activePriorityTypes = new Set(priorityTypes);
         render();
       });
     }
@@ -1116,6 +1166,11 @@ function buildDashboard() {
         if (accts.length > 0 && !accts.some(a => activeOctoAccounts.has(a))) return false;
         if (accts.length === 0 && !activeOctoAccounts.has('(empty)')) return false;
       }
+      if (colMap.priority) {
+        const pr = (r[colMap.priority] || '').trim();
+        const prKey = pr || '(empty)';
+        if (!activePriorityTypes.has(prKey)) return false;
+      }
       const stop = parseInt(r[colMap.stopDays]);
       if (isNaN(stop)) return false;
       return true;
@@ -1138,6 +1193,7 @@ function buildDashboard() {
     const orgTypeCol = colMap.orgType;
     const statusCol = colMap.status;
     const octoCol = colMap.octoAccount;
+    const prioCol = colMap.priority;
 
     rows.sort((a, b) => parseInt(b[colMap.stopDays]) - parseInt(a[colMap.stopDays]));
 
@@ -1145,6 +1201,7 @@ function buildDashboard() {
     tableHTML += '<th>Status</th>';
     tableHTML += '<th>Organization</th>';
     if (orgTypeCol) tableHTML += '<th>Type</th>';
+    if (prioCol) tableHTML += '<th>優先度</th>';
     if (octoCol) tableHTML += '<th>Account</th>';
     tableHTML += '<th>停止日数</th>';
     if (freqCol) tableHTML += '<th>更新頻度</th>';
@@ -1182,6 +1239,11 @@ function buildDashboard() {
       tableHTML += '<td>' + badge + '</td>';
       tableHTML += '<td class="org-name">' + nameCell + '</td>';
       if (orgTypeCol) tableHTML += '<td style="white-space:nowrap;color:var(--text-muted);font-size:12px">' + (r[orgTypeCol] || '') + '</td>';
+      if (prioCol) {
+        const pv = (r[prioCol] || '').trim();
+        const pc = pv === '最重要' ? 'var(--red)' : pv === '重要' ? 'var(--amber)' : 'var(--text-muted)';
+        tableHTML += '<td style="font-size:12px;white-space:nowrap;color:' + pc + '">' + (pv || '—') + '</td>';
+      }
       if (octoCol) tableHTML += '<td style="font-family:var(--mono);font-size:11px;color:var(--text-muted);white-space:nowrap">' + (r[octoCol] || '—') + '</td>';
       tableHTML += '<td class="stop-days" style="color:' + (isStopped ? 'var(--red)' : 'var(--green-light)') + '">' + stop + '</td>';
       if (freqCol) tableHTML += '<td style="font-family:var(--mono);font-size:12px;color:var(--text-muted)">' + (r[freqCol] || '') + 'd</td>';
