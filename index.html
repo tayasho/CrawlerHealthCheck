@@ -238,10 +238,35 @@ header p {
 .grid-container.cartogram-mode {
   display: grid;
   grid-template-columns: repeat(30, 1fr);
-  grid-template-rows: repeat(21, 1fr);
+  grid-template-rows: repeat(30, 1fr);
   gap: 3px;
   width: 100%;
-  aspect-ratio: 30 / 11;
+  aspect-ratio: 30 / 15;
+  position: relative;
+}
+.region-outline {
+  border: 2px dashed;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.55;
+  position: relative;
+  margin: -2px;
+}
+.region-label {
+  position: absolute;
+  top: -11px;
+  left: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+  z-index: 5;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  background: rgba(255,253,247,.85);
 }
 
 .grid-container.cartogram-mode .cell {
@@ -260,6 +285,19 @@ header p {
 
 .grid-container.cartogram-mode .cell .num {
   font-size: 8px;
+}
+.cell.cell-empty {
+  background: #e5e5e5 !important;
+  color: #999 !important;
+  border-color: #ccc !important;
+  box-shadow: 1px 1px 0 #bbb !important;
+  opacity: 0.7;
+}
+.cell.cell-empty .name {
+  color: #888 !important;
+}
+.cell.cell-empty .num {
+  color: #aaa !important;
 }
 
 .cell {
@@ -288,6 +326,7 @@ header p {
   text-overflow: ellipsis;
   display: block;
   max-width: 72px;
+  color: #222 !important;
 }
 
 .cell .num {
@@ -683,6 +722,73 @@ header p {
   margin-bottom: 24px;
   box-shadow: var(--shadow);
 }
+.search-results-panel {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+}
+.search-results-panel h3 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.search-results-panel .sr-count {
+  font-weight: 400;
+  color: #666;
+  font-size: 13px;
+}
+.search-results-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.search-results-panel th {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 2px solid var(--border);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.search-results-panel td {
+  padding: 7px 6px;
+  border-bottom: 1px solid #e5e5e5;
+  vertical-align: middle;
+}
+.search-results-panel tr:hover td {
+  background: #f8f5ee;
+}
+.search-results-panel .sr-org {
+  cursor: pointer;
+  font-weight: 600;
+  border-bottom: 2px dashed var(--border);
+}
+.search-results-panel .sr-org:hover {
+  color: var(--accent);
+}
+.search-results-panel .sr-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.search-results-panel .sr-status.active {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.search-results-panel .sr-status.stopped {
+  background: var(--red-bg);
+  color: #991B1B;
+}
 
 .action-panel h3 {
   font-size: 16px;
@@ -1025,6 +1131,7 @@ function buildDashboard() {
     <div class="action-toggle" id="actionToggle"></div>
     <div id="actionPanel" style="display:none"></div>
     <div class="controls" id="controls"></div>
+    <div id="searchResultsPanel" style="display:none"></div>
     <div class="grid-container" id="grid"></div>
     <div id="detailOverlay" class="detail-overlay" style="display:none"></div>
   `;
@@ -1038,6 +1145,66 @@ function buildDashboard() {
   let orgLang = 'en';
   let viewMode = 'tiles';
   let showActionList = false;
+
+  // Shared copy helpers
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(() => copyFallback(text));
+    }
+    return copyFallback(text);
+  }
+  function copyFallback(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+    return Promise.resolve();
+  }
+  function bindCopy(container) {
+    container.querySelectorAll('.action-copy, .cp-copyable').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const text = el.dataset.copy;
+        copyText(text).then(() => {
+          const orig = el.textContent;
+          el.textContent = '✓ コピー済';
+          el.style.color = 'var(--green)';
+          setTimeout(() => { el.textContent = orig; el.style.color = ''; }, 1200);
+        });
+      });
+    });
+  }
+
+  function showCrawlerPopup(data) {
+    const overlay = document.createElement('div');
+    overlay.className = 'crawler-popup-overlay';
+    let html = `<div class="crawler-popup">
+      <button class="cp-close">&times;</button>
+      <h4>🦜 クローラー詳細</h4>
+      <div class="cp-row"><span class="cp-label">組織名</span><span class="cp-val" style="font-weight:600">${data.name || '—'}</span></div>
+      <div class="cp-row"><span class="cp-label">Crawler ID</span><span class="cp-val"><span class="cp-copyable" data-copy="${data.id || ''}" title="クリックでコピー">${data.id || '—'}</span></span></div>
+      <div class="cp-row"><span class="cp-label">国</span><span class="cp-val">${data.country || '—'}</span></div>`;
+    if (data.prio) {
+      html += `<div class="cp-row"><span class="cp-label">優先度</span><span class="cp-val">${data.prio === '最重要' ? '<span class="prio-badge critical">最重要</span>' : data.prio === '重要' ? '<span class="prio-badge important">重要</span>' : data.prio}</span></div>`;
+    }
+    html += `<div class="cp-row"><span class="cp-label">停止日数</span><span class="cp-val" style="font-family:var(--mono);font-weight:700;color:${parseInt(data.stop) > 0 ? 'var(--red)' : '#16A34A'}">${data.stop}日</span></div>
+      <div class="cp-row"><span class="cp-label">最終取得日</span><span class="cp-val">${data.last ? `<span class="cp-copyable" data-copy="${data.last}" title="クリックでコピー">${data.last}</span>` : '—'}</span></div>`;
+    if (data.url) {
+      html += `<div class="cp-row"><span class="cp-label">int-slate URL</span><span class="cp-val"><a href="${data.url}" target="_blank" rel="noopener" class="cp-link">${data.url}</a></span></div>`;
+    }
+    if (data.target) {
+      html += `<div class="cp-row"><span class="cp-label">Target URL</span><span class="cp-val"><a href="${data.target}" target="_blank" rel="noopener" class="cp-link">${data.target}</a></span></div>`;
+    }
+    html += `</div>`;
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+    bindCopy(overlay);
+    overlay.querySelector('.cp-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+  }
 
   function getActionList() {
     const prioOrder = { '最重要': 0, '重要': 1 };
@@ -1079,13 +1246,18 @@ function buildDashboard() {
       const orgName = r[nameCol] || '';
       const abbr = r[abbrCol] || '';
       const jp = r[jpCol] || '';
-      const displayName = orgLang === 'ja' && jp ? jp : (orgName || abbr);
       const detailUrl = r[urlCol] || '';
       const targetUrl = r[targetCol] || '';
+      const crawlerId = crawlerIdCol ? (r[crawlerIdCol] || '').trim() : '';
+      // search filter for action list
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const fields = [country, orgName, abbr, jp, crawlerId, detailUrl, targetUrl];
+        if (!fields.some(f => f.toLowerCase().includes(q))) return;
+      }
+      const displayName = orgLang === 'ja' && jp ? jp : (orgName || abbr);
       const status = colMap.status ? (r[colMap.status] || '').trim() : '';
       const octo = colMap.octoAccount ? (r[colMap.octoAccount] || '').trim() : '';
-
-      const crawlerId = crawlerIdCol ? (r[crawlerIdCol] || '').trim() : '';
       let lastCrawled = lastCrawledCol ? (r[lastCrawledCol] || '').trim() : '';
       // normalize to yyyy-mm-dd
       if (lastCrawled) {
@@ -1133,25 +1305,15 @@ function buildDashboard() {
           <th>#</th>
           <th>優先度</th>
           <th>組織名</th>
-          <th>国</th>
           <th>停止日数</th>
           <th>最終取得日</th>
-          <th>Status</th>
           <th>Account</th>
-          <th>Target</th>
         </tr></thead>
         <tbody>`;
     items.forEach((it, i) => {
       const prioBadge = it.prio === '最重要'
         ? '<span class="prio-badge critical">最重要</span>'
         : '<span class="prio-badge important">重要</span>';
-      let targetHost = '—';
-      if (it.targetUrl) {
-        try { targetHost = new URL(it.targetUrl).hostname; } catch(e) { targetHost = it.targetUrl.slice(0, 30); }
-      }
-      const targetLink = it.targetUrl
-        ? `<a href="${it.targetUrl}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;word-break:break-all;font-size:12px">${targetHost}</a>`
-        : '—';
       const safeName = (it.displayName || '').replace(/"/g, '&quot;');
       const safeId = (it.crawlerId || '').replace(/"/g, '&quot;');
       const safeUrl = (it.detailUrl || '').replace(/"/g, '&quot;');
@@ -1161,137 +1323,140 @@ function buildDashboard() {
       html += `<tr>
         <td class="rank-cell">${i + 1}</td>
         <td>${prioBadge}</td>
-        <td style="font-weight:600;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <td style="font-weight:600;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
           <span class="action-crawler-detail" data-name="${safeName}" data-id="${safeId}" data-url="${safeUrl}" data-target="${safeTarget}" data-last="${safeLastCrawled}" data-prio="${safePrio}" data-country="${it.country.replace(/"/g,'&quot;')}" data-stop="${it.stop}" title="クローラー詳細を表示" style="cursor:pointer;border-bottom:2px solid var(--blue);padding-bottom:1px;color:var(--blue)">${it.displayName || '—'}</span>
         </td>
-        <td><span class="action-detail" data-country="${it.country.replace(/"/g,'&quot;')}" style="cursor:pointer;color:var(--blue);text-decoration:underline;font-weight:600" title="詳細を表示">${it.country}</span></td>
         <td style="font-family:var(--mono);font-weight:700;color:var(--red)">${it.stop}日</td>
         <td>${it.lastCrawled ? `<span class="action-copy" data-copy="${it.lastCrawled}" title="クリックでコピー" style="cursor:pointer;border-bottom:2px dashed var(--border);padding-bottom:1px;font-family:var(--mono);font-size:12px">${it.lastCrawled}</span>` : '—'}</td>
-        <td><span style="font-size:12px">${it.status || '—'}</span></td>
         <td style="font-size:12px">${it.octo || '—'}</td>
-        <td>${targetLink}</td>
       </tr>`;
     });
     html += '</tbody></table></div>';
     panel.innerHTML = html;
 
-    // Copy helper
-    function copyText(text) {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        return navigator.clipboard.writeText(text).catch(() => copyFallback(text));
-      }
-      return copyFallback(text);
-    }
-    function copyFallback(text) {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand('copy'); } catch(e) {}
-      document.body.removeChild(ta);
-      return Promise.resolve();
-    }
-    function bindCopy(container) {
-      container.querySelectorAll('.action-copy, .cp-copyable').forEach(el => {
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const text = el.dataset.copy;
-          copyText(text).then(() => {
-            const orig = el.textContent;
-            el.textContent = '✓ コピー済';
-            el.style.color = 'var(--green)';
-            setTimeout(() => { el.textContent = orig; el.style.color = ''; }, 1200);
-          });
-        });
-      });
-    }
     bindCopy(panel);
 
-    // Crawler detail popup
+    // Crawler detail popup from action list
     panel.querySelectorAll('.action-crawler-detail').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        const d = el.dataset;
-        const overlay = document.createElement('div');
-        overlay.className = 'crawler-popup-overlay';
-        let popupHTML = `<div class="crawler-popup">
-          <button class="cp-close">&times;</button>
-          <h4>🦜 クローラー詳細</h4>
-          <div class="cp-row"><span class="cp-label">組織名</span><span class="cp-val" style="font-weight:600">${d.name || '—'}</span></div>
-          <div class="cp-row"><span class="cp-label">Crawler ID</span><span class="cp-val"><span class="cp-copyable" data-copy="${d.id}" title="クリックでコピー">${d.id || '—'}</span></span></div>
-          <div class="cp-row"><span class="cp-label">国</span><span class="cp-val">${d.country || '—'}</span></div>
-          <div class="cp-row"><span class="cp-label">優先度</span><span class="cp-val">${d.prio === '最重要' ? '<span class="prio-badge critical">最重要</span>' : '<span class="prio-badge important">重要</span>'}</span></div>
-          <div class="cp-row"><span class="cp-label">停止日数</span><span class="cp-val" style="font-family:var(--mono);font-weight:700;color:var(--red)">${d.stop}日</span></div>
-          <div class="cp-row"><span class="cp-label">最終取得日</span><span class="cp-val">${d.last ? `<span class="cp-copyable" data-copy="${d.last}" title="クリックでコピー">${d.last}</span>` : '—'}</span></div>`;
-        if (d.url) {
-          popupHTML += `<div class="cp-row"><span class="cp-label">int-slate URL</span><span class="cp-val"><a href="${d.url}" target="_blank" rel="noopener" class="cp-link">${d.url}</a></span></div>`;
-        }
-        if (d.target) {
-          popupHTML += `<div class="cp-row"><span class="cp-label">Target URL</span><span class="cp-val"><a href="${d.target}" target="_blank" rel="noopener" class="cp-link">${d.target}</a></span></div>`;
-        }
-        popupHTML += `</div>`;
-        overlay.innerHTML = popupHTML;
-        document.body.appendChild(overlay);
-
-        bindCopy(overlay);
-        overlay.querySelector('.cp-close').addEventListener('click', () => overlay.remove());
-        overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+        showCrawlerPopup(el.dataset);
       });
     });
 
-    // Open country detail on click
-    panel.querySelectorAll('.action-detail').forEach(el => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        showDetail(el.dataset.country);
-      });
-    });
   }
 
   const TILE_COORDS = {
-    "Canada":[1,1],"USA":[1,2],"Mexico":[1,4],"Guatemala":[2,5],"Belize":[2,3],"El Salvador":[1,5],
-    "Costa Rica":[3,7],"Panama":[4,8],"Cuba":[4,3],"Jamaica":[5,4],"Dominican Republic":[6,4],
-    "Bahamas":[4,2],"Trinidad and Tobago":[7,8],"Barbados":[8,6],"Saint Lucia":[8,7],
-    "Saint Vincent and the Grenadines":[8,5],"Colombia":[5,9],"Ecuador":[5,10],"Peru":[5,11],
-    "Brazil":[8,11],"Chile":[6,13],"Argentina":[6,14],"American Samoa":[29,19],
-    "Iceland":[10,1],"Norway":[13,2],"Sweden":[14,2],"Finland":[15,2],"Denmark":[14,3],
-    "UK":[12,4],"Ireland":[11,4],"Netherlands":[13,4],"Belgium":[13,5],"Luxembourg":[12,5],
-    "France":[12,6],"Spain":[11,8],"Portugal":[11,7],"Germany":[14,5],"Switzerland":[13,6],
-    "Austria":[15,6],"Italy":[14,8],"Czech Republic":[15,5],"Poland":[16,4],"Slovakia":[16,5],
-    "Hungary":[16,6],"Slovenia":[14,7],"Croatia":[15,7],"Serbia":[16,7],"Montenegro":[15,8],
-    "North Macedonia":[16,8],"Greece":[16,9],"Romania":[17,6],"Bulgaria":[17,7],"Moldova":[18,5],
-    "Estonia":[16,2],"Latvia":[16,3],"Lithuania":[17,3],"Ukraine":[18,4],"Cyprus":[17,10],
-    "EU":[12,3],"Morocco":[12,10],"Tunisia":[14,10],"Egypt":[16,11],"Mauritania":[11,12],
-    "Senegal":[11,13],"Gambia":[10,13],"Guinea-Bissau":[10,14],"Guinea":[11,14],"Mali":[12,12],
-    "Burkina Faso":[13,13],"Ivory Coast":[12,15],"Benin":[15,14],"Nigeria":[14,13],
-    "Cameroon":[14,15],"Congo-Brazzaville":[14,16],"Congo-Kinshasa":[15,15],"South Sudan":[16,15],
-    "Djibouti":[17,13],"Kenya":[17,15],"Uganda":[16,16],"Rwanda":[15,16],"Tanzania":[16,17],
-    "Angola":[13,17],"Mozambique":[16,19],"Botswana":[15,18],"South Africa":[15,20],
-    "Swaziland":[16,20],"Cape Verde":[10,15],"Seychelles":[19,17],"Mauritius":[18,19],
-    "Turkey":[18,8],"Syria":[19,8],"Iraq":[20,8],"Iran":[21,8],"Saudi Arabia":[19,10],
-    "Oman":[21,10],"UAE":[20,10],"Qatar":[20,11],"Bahrain":[20,9],"Jordan":[18,9],
-    "Israel":[17,9],"State of Palestine":[18,10],"Georgia":[19,6],"Azerbaijan":[21,7],
-    "Kazakhstan":[22,5],"Uzbekistan":[22,6],"Turkmenistan":[21,6],"Kyrgyzstan":[23,5],
-    "Tajikistan":[23,6],"India":[22,9],"Pakistan":[21,9],"Nepal":[23,8],
-    "Bangladesh":[23,9],"Sri Lanka":[22,11],"Maldives":[21,12],"Bhutan":[24,7],
-    "Myanmar":[24,9],"Thailand":[25,9],"Laos":[25,8],"Vietnam":[26,9],"Cambodia":[25,10],
-    "Malaysia":[25,11],"Singapore":[25,12],"Indonesia":[26,13],"Philippines":[27,10],
-    "Brunei Darussalam":[26,12],"East Timor":[27,14],"Mongolia":[24,4],"China":[24,6],
-    "Japan":[27,5],"Korea":[26,5],"Taiwan":[26,7],"Hong Kong":[25,7],
-    "Australia":[24,19],"New Zealand":[26,20],"Fiji":[28,18],"Solomon Islands":[28,17],
-    "Samoa":[29,18],"Tonga":[29,19],"Kiribati":[29,16],"Tuvalu":[29,17],
-    "Marshall Islands":[29,15],"Micronesia":[28,15],"Palau":[27,13],
-    "Russia":[19,3],"Montenegro":[15,8],
-    "AFRICA":[13,19],"ASIA":[23,3],"MENA":[19,12],"Europe":[11,3],
-    "Multinational":[10,2],"Other":[9,1],"Other(ASEAN)":[26,14],"Other(ASEM)":[23,2],
-    "Other(Africa)":[12,19],"Other(Asia)":[24,3],"Other(Europe)":[11,2],
-    "Republic of Kosovo":[16,8],"Morocco":[12,10],
-    "Nepal":[23,8],"Panama":[4,7],
+    // North America
+    "Canada":[3,2],"USA":[3,3],"Mexico":[3,5],
+    // Central America & Caribbean
+    "Guatemala":[4,6],"Belize":[5,5],"El Salvador":[4,7],"Honduras":[5,6],
+    "Nicaragua":[6,7],"Costa Rica":[5,7],"Panama":[5,8],
+    "Cuba":[6,4],"Jamaica":[7,4],"Haiti":[7,3],"Dominican Republic":[8,4],
+    "Bahamas":[6,3],"Trinidad and Tobago":[9,6],"Barbados":[9,5],"Saint Lucia":[10,6],
+    "Saint Vincent and the Grenadines":[10,5],
+    // South America
+    "Colombia":[6,9],"Ecuador":[5,10],"Peru":[6,11],"Venezuela":[7,8],"Guyana":[8,8],
+    "Brazil":[8,11],"Bolivia":[7,12],"Paraguay":[7,13],"Chile":[6,14],"Argentina":[7,15],
+    "Suriname":[8,9],"Uruguay":[8,14],
+    // Europe - North
+    "Iceland":[12,1],"Norway":[14,2],"Sweden":[15,2],"Finland":[16,2],"Denmark":[15,3],
+    // Europe - West
+    "UK":[13,4],"Ireland":[12,4],"Netherlands":[14,4],"Belgium":[14,5],"Luxembourg":[13,5],
+    "France":[13,6],"Spain":[12,8],"Portugal":[12,7],
+    // Europe - Central
+    "Germany":[15,5],"Switzerland":[14,6],"Austria":[16,6],"Czech Republic":[16,5],
+    "Poland":[17,4],"Slovakia":[17,5],"Hungary":[17,6],"Slovenia":[15,7],
+    // Europe - South & Balkans
+    "Italy":[15,8],"Croatia":[16,7],"Serbia":[17,7],"Montenegro":[16,8],
+    "North Macedonia":[17,8],"Greece":[17,9],"Albania":[16,9],
+    "Romania":[18,6],"Bulgaria":[18,7],"Moldova":[19,5],"Republic of Kosovo":[18,8],
+    // Europe - Baltic & East
+    "Estonia":[17,2],"Latvia":[17,3],"Lithuania":[18,3],
+    "Ukraine":[19,4],"Belarus":[19,3],"Russia":[20,3],
+    "EU":[13,3],"Cyprus":[18,10],
+    // North Africa
+    "Morocco":[13,10],"Algeria":[14,11],"Tunisia":[15,10],"Libya":[16,11],
+    "Egypt":[17,11],"Western Sahara":[12,11],
+    // West Africa
+    "Mauritania":[12,12],"Senegal":[12,13],"Gambia":[11,13],"Guinea-Bissau":[11,14],
+    "Guinea":[12,14],"Sierra Leone":[11,15],"Liberia":[12,15],
+    "Mali":[13,12],"Niger":[14,12],"Burkina Faso":[14,13],"Togo":[15,14],
+    "Côte d'Ivoire":[13,15],"Ghana":[14,14],"Benin":[16,14],"Nigeria":[15,13],
+    "Cape Verde":[10,14],
+    // Central & East Africa
+    "Chad":[15,12],"Sudan":[16,12],"Eritrea":[17,12],
+    "Central African Republic":[16,13],"Cameroon":[15,15],
+    "Equatorial Guinea":[13,16],"Gabon":[14,16],
+    "Congo-Brazzaville":[15,16],"Congo-Kinshasa":[16,15],
+    "South Sudan":[17,15],"Ethiopia":[18,14],"Somalia":[19,14],
+    "Djibouti":[18,13],"Kenya":[18,15],"Uganda":[17,16],
+    "Rwanda":[16,16],"Burundi":[16,17],"Tanzania":[17,17],
+    // Southern Africa
+    "Angola":[14,17],"Zambia":[15,18],"Malawi":[17,18],"Comoros":[19,18],
+    "Mozambique":[17,19],"Botswana":[16,18],"Zimbabwe":[16,19],"Namibia":[15,19],
+    "South Africa":[16,20],"Eswatini":[17,20],"Lesotho":[17,21],
+    "Madagascar":[18,20],"Seychelles":[20,17],"Mauritius":[19,19],
+    // Other Africa labels
+    "Africa":[14,19],"Other(Africa)":[13,19],
+    // Middle East
+    "Turkey":[19,8],"Lebanon":[19,7],"Syria":[20,8],"Iraq":[21,8],"Iran":[22,8],
+    "Saudi Arabia":[20,10],"Yemen":[20,11],"Oman":[22,10],
+    "UAE":[21,10],"United Arab Emirates":[21,10],
+    "Kuwait":[20,9],"Qatar":[21,11],"Bahrain":[21,9],"Jordan":[19,9],
+    "Israel":[18,9],"State of Palestine":[19,10],
+    // Caucasus & Central Asia
+    "Georgia":[20,6],"Azerbaijan":[22,7],
+    "Kazakhstan":[23,5],"Uzbekistan":[23,6],"Turkmenistan":[22,6],"Kyrgyzstan":[24,5],
+    "Tajikistan":[24,6],"Afghanistan":[23,7],
+    // South Asia
+    "India":[23,9],"Pakistan":[22,9],"Nepal":[24,8],
+    "Bangladesh":[24,9],"Sri Lanka":[23,11],"Maldives":[22,12],"Bhutan":[25,7],
+    // Southeast Asia
+    "Myanmar":[25,9],"Thailand":[26,9],"Laos":[26,8],"Vietnam":[27,9],"Cambodia":[26,10],
+    "Malaysia":[26,11],"Singapore":[26,12],"Indonesia":[27,13],"Philippines":[28,10],
+    "Brunei Darussalam":[27,12],"East Timor":[28,14],
+    // East Asia
+    "Mongolia":[25,4],"China":[25,6],"Japan":[28,5],"Korea":[27,5],"North Korea":[27,4],
+    "Taiwan":[27,7],"Hong Kong":[26,7],
+    // Oceania
+    "Australia":[25,19],"New Zealand":[27,20],"Fiji":[29,18],"Solomon Islands":[29,17],
+    "Papua New Guinea":[28,16],"Samoa":[30,18],"American Samoa":[30,19],
+    "Tonga":[30,20],"Kiribati":[30,16],"Tuvalu":[30,17],
+    "Marshall Islands":[30,15],"Micronesia":[29,15],"Palau":[28,13],
+    // Oceania label
+    "Oceania":[26,18],
+    // Other / Multi
+    "Multinational":[2,1],"Other(ASEAN)":[27,14],"Other(ASEM)":[24,2],
+    "Other(Asia)":[25,3],"Other(Europe)":[12,2],
   };
+
+  // Regional boundaries for cartogram overlay
+  const REGION_BOUNDS = {
+    "北米": { color: "#3B82F6", countries: ["Canada","USA","Mexico"] },
+    "中米・カリブ": { color: "#8B5CF6", countries: ["Guatemala","Belize","El Salvador","Honduras","Nicaragua","Costa Rica","Panama","Cuba","Jamaica","Haiti","Dominican Republic","Bahamas","Trinidad and Tobago","Barbados","Saint Lucia","Saint Vincent and the Grenadines"] },
+    "南米": { color: "#6366F1", countries: ["Colombia","Ecuador","Peru","Venezuela","Guyana","Brazil","Bolivia","Paraguay","Chile","Argentina","Suriname","Uruguay"] },
+    "ヨーロッパ": { color: "#2563EB", countries: ["Iceland","Norway","Sweden","Finland","Denmark","UK","Ireland","Netherlands","Belgium","Luxembourg","France","Spain","Portugal","Germany","Switzerland","Austria","Czech Republic","Poland","Slovakia","Hungary","Slovenia","Italy","Croatia","Serbia","Montenegro","North Macedonia","Greece","Albania","Romania","Bulgaria","Moldova","Estonia","Latvia","Lithuania","Ukraine","Belarus","Russia","EU","Cyprus","Republic of Kosovo"] },
+    "中東": { color: "#D97706", countries: ["Turkey","Lebanon","Syria","Iraq","Iran","Saudi Arabia","Yemen","Oman","UAE","United Arab Emirates","Kuwait","Qatar","Bahrain","Jordan","Israel","State of Palestine"] },
+    "アフリカ": { color: "#DC2626", countries: ["Morocco","Algeria","Tunisia","Libya","Egypt","Western Sahara","Mauritania","Senegal","Gambia","Guinea-Bissau","Guinea","Sierra Leone","Liberia","Mali","Niger","Burkina Faso","Togo","Côte d'Ivoire","Ghana","Benin","Nigeria","Cape Verde","Chad","Sudan","Eritrea","Central African Republic","Cameroon","Equatorial Guinea","Gabon","Congo-Brazzaville","Congo-Kinshasa","South Sudan","Ethiopia","Somalia","Djibouti","Kenya","Uganda","Rwanda","Burundi","Tanzania","Angola","Zambia","Malawi","Comoros","Mozambique","Botswana","Zimbabwe","Namibia","South Africa","Eswatini","Lesotho","Madagascar","Seychelles","Mauritius","Africa","Other(Africa)"] },
+    "中央アジア・コーカサス": { color: "#9333EA", countries: ["Georgia","Azerbaijan","Kazakhstan","Uzbekistan","Turkmenistan","Kyrgyzstan","Tajikistan","Afghanistan"] },
+    "南アジア": { color: "#059669", countries: ["India","Pakistan","Nepal","Bangladesh","Sri Lanka","Maldives","Bhutan"] },
+    "東南アジア": { color: "#0891B2", countries: ["Myanmar","Thailand","Laos","Vietnam","Cambodia","Malaysia","Singapore","Indonesia","Philippines","Brunei Darussalam","East Timor","Other(ASEAN)"] },
+    "東アジア": { color: "#E11D48", countries: ["Mongolia","China","Japan","Korea","North Korea","Taiwan","Hong Kong"] },
+    "オセアニア": { color: "#7C3AED", countries: ["Australia","New Zealand","Fiji","Solomon Islands","Papua New Guinea","Samoa","American Samoa","Tonga","Kiribati","Tuvalu","Marshall Islands","Micronesia","Palau","Oceania"] },
+  };
+
+  // Header columns for search
+  const _searchNameCol = headers.find(h => h.toLowerCase().includes('organization') && h.toLowerCase().includes('original')) || '';
+  const _searchAbbrCol = headers.find(h => h.toLowerCase().includes('abbreviation')) || '';
+  const _searchJpCol = headers.find(h => h === '日本語名称') || '';
+  const _searchIdCol = headers.find(h => h.toLowerCase().includes('crawler id')) || '';
+  const _searchUrlCol = headers.find(h => h.toLowerCase().includes('detail page url')) || '';
+  const _searchTargetCol = headers.find(h => h.toLowerCase().includes('target url')) || '';
 
   function compute() {
     const countryMap = {};
+    const q = searchQuery ? searchQuery.toLowerCase() : '';
     rawRows.forEach(r => {
       const country = (r[colMap.country] || '').trim();
       if (!country) return;
@@ -1316,6 +1481,19 @@ function buildDashboard() {
       }
       const stop = parseInt(r[colMap.stopDays]);
       if (isNaN(stop)) return;
+      // Search filter: match country, org name, abbreviation, JP name, crawler ID, or URLs
+      if (q) {
+        const fields = [
+          country,
+          r[_searchNameCol] || '',
+          r[_searchAbbrCol] || '',
+          r[_searchJpCol] || '',
+          r[_searchIdCol] || '',
+          r[_searchUrlCol] || '',
+          r[_searchTargetCol] || ''
+        ];
+        if (!fields.some(f => f.toLowerCase().includes(q))) return;
+      }
       if (!countryMap[country]) countryMap[country] = { active: 0, stopped: 0, total: 0 };
       if (stop > 0) countryMap[country].stopped++;
       else countryMap[country].active++;
@@ -1324,17 +1502,117 @@ function buildDashboard() {
     let entries = Object.entries(countryMap).map(([name, d]) => ({
       name, ...d, pct: d.total ? Math.round(d.stopped / d.total * 100) : 0
     }));
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      entries = entries.filter(e => e.name.toLowerCase().includes(q));
-    }
     if (sortBy === 'total') entries.sort((a, b) => b.total - a.total);
     else if (sortBy === 'pct') entries.sort((a, b) => b.pct - a.pct || b.stopped - a.stopped);
     else entries.sort((a, b) => a.name.localeCompare(b.name));
     return entries;
   }
 
+  function renderSearchResults() {
+    const panel = document.getElementById('searchResultsPanel');
+    if (!searchQuery || searchQuery.trim().length === 0) {
+      panel.style.display = 'none';
+      return;
+    }
+    const q = searchQuery.toLowerCase();
+    const nameCol = _searchNameCol;
+    const abbrCol = _searchAbbrCol;
+    const jpCol = _searchJpCol;
+    const crawlerIdCol = _searchIdCol;
+    const urlCol = _searchUrlCol;
+    const targetCol = _searchTargetCol;
+    const lastCrawledColH = headers.find(h => h.toLowerCase().includes('last crawled') || h.toLowerCase().includes('last_crawled')) || '';
+
+    const results = [];
+    rawRows.forEach(r => {
+      const country = (r[colMap.country] || '').trim();
+      if (!country) return;
+      if (colMap.orgType) {
+        const ot = (r[colMap.orgType] || '').trim();
+        if (ot && !activeOrgTypes.has(ot)) return;
+      }
+      if (colMap.status) {
+        const st = (r[colMap.status] || '').trim();
+        if (st && !activeStatusTypes.has(st)) return;
+      }
+      if (colMap.octoAccount) {
+        const raw = (r[colMap.octoAccount] || '').trim();
+        const accts = raw ? raw.split(';').map(a => a.trim()).filter(Boolean) : [];
+        if (accts.length > 0 && !accts.some(a => activeOctoAccounts.has(a))) return;
+        if (accts.length === 0 && !activeOctoAccounts.has('(empty)')) return;
+      }
+      if (colMap.priority) {
+        const pr = (r[colMap.priority] || '').trim();
+        const prKey = pr || '(empty)';
+        if (!activePriorityTypes.has(prKey)) return;
+      }
+      const stop = parseInt(r[colMap.stopDays]);
+      if (isNaN(stop)) return;
+      const orgName = r[nameCol] || '';
+      const abbr = r[abbrCol] || '';
+      const jp = r[jpCol] || '';
+      const id = crawlerIdCol ? (r[crawlerIdCol] || '').trim() : '';
+      const url = r[urlCol] || '';
+      const target = r[targetCol] || '';
+      const fields = [country, orgName, abbr, jp, id, url, target];
+      if (!fields.some(f => f.toLowerCase().includes(q))) return;
+      const displayName = orgLang === 'ja' && jp ? jp : (orgName || abbr);
+      let lastCrawled = lastCrawledColH ? (r[lastCrawledColH] || '').trim() : '';
+      if (lastCrawled) {
+        const d = new Date(lastCrawled);
+        if (!isNaN(d.getTime())) lastCrawled = d.toISOString().slice(0, 10);
+      }
+      const prio = colMap.priority ? (r[colMap.priority] || '').trim() : '';
+      const status = colMap.status ? (r[colMap.status] || '').trim() : '';
+      results.push({ country, displayName, orgName, id, stop, lastCrawled, prio, status, url, target });
+    });
+
+    if (results.length === 0) {
+      panel.style.display = 'none';
+      return;
+    }
+
+    results.sort((a, b) => b.stop - a.stop);
+
+    let html = `<div class="search-results-panel">`;
+    html += `<h3>🔍 検索結果 <span class="sr-count">${results.length} 件のクローラー</span></h3>`;
+    html += `<table><thead><tr>
+      <th>#</th>
+      <th>組織名</th>
+      <th>国</th>
+      <th>ステータス</th>
+      <th>停止日数</th>
+      <th>最終取得日</th>
+      <th>Crawler ID</th>
+    </tr></thead><tbody>`;
+    results.forEach((it, i) => {
+      const isActive = it.stop <= 0;
+      const statusLabel = isActive ? '稼働中' : '停止中';
+      const statusCls = isActive ? 'active' : 'stopped';
+      html += `<tr>
+        <td>${i + 1}</td>
+        <td><span class="sr-org" data-name="${(it.orgName || it.displayName).replace(/"/g,'&quot;')}" data-id="${it.id}" data-country="${it.country}" data-stop="${it.stop}" data-last="${it.lastCrawled}" data-url="${it.url}" data-target="${it.target}" data-prio="${it.prio}">${it.displayName}</span></td>
+        <td>${it.country}</td>
+        <td><span class="sr-status ${statusCls}">${statusLabel}</span></td>
+        <td>${it.stop > 0 ? it.stop + '日' : '—'}</td>
+        <td>${it.lastCrawled || '—'}</td>
+        <td style="font-family:var(--mono);font-size:12px">${it.id || '—'}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+
+    panel.querySelectorAll('.sr-org').forEach(el => {
+      el.addEventListener('click', () => {
+        showCrawlerPopup(el.dataset);
+      });
+    });
+  }
+
   function render() {
+    // preserve search focus across DOM rebuild
+    const prevFocused = document.activeElement && document.activeElement.id === 'searchInput';
     const entries = compute();
     const totalActive = entries.reduce((s, e) => s + e.active, 0);
     const totalStopped = entries.reduce((s, e) => s + e.stopped, 0);
@@ -1422,7 +1700,7 @@ function buildDashboard() {
     ctrlHTML += `
       <div class="search-box">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="searchInput" placeholder="Search country..." value="${searchQuery}">
+        <input type="text" id="searchInput" placeholder="国名 / クローラー名 / ID / URL で検索..." value="${searchQuery}">
       </div>
     `;
     document.getElementById('controls').innerHTML = ctrlHTML;
@@ -1505,10 +1783,10 @@ function buildDashboard() {
     });
     const searchInput = document.getElementById('searchInput');
     searchInput.addEventListener('input', e => { searchQuery = e.target.value; render(); });
-    setTimeout(() => {
-      const si = document.getElementById('searchInput');
-      if (si && searchQuery) { si.focus(); si.setSelectionRange(si.value.length, si.value.length); }
-    }, 0);
+    if (prevFocused) {
+      searchInput.focus();
+      searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+    }
 
     const grid = document.getElementById('grid');
     if (viewMode === 'cartogram') {
@@ -1559,7 +1837,44 @@ function buildDashboard() {
           </div>`;
         }).join('');
       }
+      // Add grey tiles for countries in TILE_COORDS but not in data
+      const dataCountries = new Set(entries.map(e => e.name));
+      Object.entries(TILE_COORDS).forEach(([name, coord]) => {
+        if (dataCountries.has(name)) return;
+        // Skip label-only entries
+        if (['Oceania','Africa','Other(Africa)','Other(Asia)','Other(Europe)','Other(ASEAN)','Other(ASEM)','Multinational'].includes(name)) return;
+        html += `<div class="cell cell-empty" style="--gc:${coord[0]};--gr:${coord[1]}" data-country="${name.replace(/"/g,'&quot;')}">
+          <span class="name">${name}</span>
+          <span class="num">—</span>
+          <div class="tooltip">
+            <div class="tt-name">${name}</div>
+            <div class="tt-row"><span class="tt-label">クローラーなし</span></div>
+          </div>
+        </div>`;
+      });
       grid.innerHTML = html;
+      // Draw region boundary outlines using CSS grid placement (responsive)
+      Object.entries(REGION_BOUNDS).forEach(([label, def]) => {
+        let minCol = Infinity, maxCol = 0, minRow = Infinity, maxRow = 0;
+        let count = 0;
+        def.countries.forEach(c => {
+          const coord = TILE_COORDS[c];
+          if (!coord) return;
+          count++;
+          if (coord[0] < minCol) minCol = coord[0];
+          if (coord[0] > maxCol) maxCol = coord[0];
+          if (coord[1] < minRow) minRow = coord[1];
+          if (coord[1] > maxRow) maxRow = coord[1];
+        });
+        if (!count) return;
+        const outline = document.createElement('div');
+        outline.className = 'region-outline';
+        outline.style.gridColumn = minCol + ' / ' + (maxCol + 1);
+        outline.style.gridRow = minRow + ' / ' + (maxRow + 1);
+        outline.style.borderColor = def.color;
+        outline.innerHTML = '<span class="region-label" style="color:' + def.color + '">' + label + '</span>';
+        grid.appendChild(outline);
+      });
     } else {
       grid.innerHTML = entries.map(d => {
         const c = getColorForPct(d.pct);
@@ -1582,6 +1897,7 @@ function buildDashboard() {
     });
 
     renderActionList();
+    renderSearchResults();
   }
 
   function getFilteredRows(country) {
@@ -1629,6 +1945,8 @@ function buildDashboard() {
     const statusCol = colMap.status;
     const octoCol = colMap.octoAccount;
     const prioCol = colMap.priority;
+    const crawlerIdCol2 = headers.find(h => h.toLowerCase().includes('crawler id')) || '';
+    const lastCrawledCol2 = headers.find(h => h.toLowerCase().includes('last crawled') || h.toLowerCase().includes('last_crawled')) || '';
 
     rows.sort((a, b) => parseInt(b[colMap.stopDays]) - parseInt(a[colMap.stopDays]));
 
@@ -1666,9 +1984,23 @@ function buildDashboard() {
         displayName = abbr && abbr !== orgName ? abbr + ' — ' + orgName : (orgName || abbr || jp || '—');
         titleAttr = jp || orgName;
       }
-      const nameCell = detailUrl
-        ? '<a href="' + detailUrl + '" target="_blank" rel="noopener" title="' + titleAttr + '">' + displayName + '</a>'
-        : '<span title="' + titleAttr + '">' + displayName + '</span>';
+      const cid = crawlerIdCol2 ? (r[crawlerIdCol2] || '').trim() : '';
+      let lastCr = lastCrawledCol2 ? (r[lastCrawledCol2] || '').trim() : '';
+      if (lastCr) { const dd = new Date(lastCr); if (!isNaN(dd.getTime())) lastCr = dd.toISOString().slice(0, 10); }
+      const pv2 = prioCol ? (r[prioCol] || '').trim() : '';
+
+      const esc = s => (s || '').replace(/"/g, '&quot;');
+      const nameCell = '<span class="detail-crawler-link" '
+        + 'data-name="' + esc(orgName || displayName) + '" '
+        + 'data-id="' + esc(cid) + '" '
+        + 'data-country="' + esc(country) + '" '
+        + 'data-stop="' + stop + '" '
+        + 'data-last="' + esc(lastCr) + '" '
+        + 'data-url="' + esc(detailUrl) + '" '
+        + 'data-target="' + esc(targetUrl) + '" '
+        + 'data-prio="' + esc(pv2) + '" '
+        + 'title="クローラー詳細を表示" style="cursor:pointer;color:var(--blue);border-bottom:2px solid var(--blue);padding-bottom:1px">'
+        + displayName + '</span>';
 
       tableHTML += '<tr>';
       tableHTML += '<td>' + badge + '</td>';
@@ -1713,6 +2045,15 @@ function buildDashboard() {
     document.getElementById('detailClose').addEventListener('click', closeDetail);
     overlay.addEventListener('click', e => { if (e.target === overlay) closeDetail(); });
     document.addEventListener('keydown', escHandler);
+
+    // Crawler detail popups from country detail rows
+    overlay.querySelectorAll('.detail-crawler-link').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        showCrawlerPopup(el.dataset);
+      });
+    });
   }
 
   function escHandler(e) { if (e.key === 'Escape') closeDetail(); }
