@@ -999,6 +999,8 @@ function buildDashboard() {
     const abbrCol = headers.find(h => h.toLowerCase().includes('abbreviation')) || '';
     const urlCol = headers.find(h => h.toLowerCase().includes('detail page url')) || '';
     const targetCol = headers.find(h => h.toLowerCase().includes('target url')) || '';
+    const crawlerIdCol = headers.find(h => h.toLowerCase().includes('crawler id')) || '';
+    const lastCrawledCol = headers.find(h => h.toLowerCase().includes('last crawled') || h.toLowerCase().includes('last_crawled')) || '';
 
     const items = [];
     rawRows.forEach(r => {
@@ -1030,13 +1032,20 @@ function buildDashboard() {
       const orgName = r[nameCol] || '';
       const abbr = r[abbrCol] || '';
       const jp = r[jpCol] || '';
-      const displayName = orgLang === 'ja' && jp ? jp : (abbr || orgName);
+      const displayName = orgLang === 'ja' && jp ? jp : (orgName || abbr);
       const detailUrl = r[urlCol] || '';
       const targetUrl = r[targetCol] || '';
       const status = colMap.status ? (r[colMap.status] || '').trim() : '';
       const octo = colMap.octoAccount ? (r[colMap.octoAccount] || '').trim() : '';
 
-      items.push({ country, stop, prio, displayName, detailUrl, targetUrl, status, octo, prioRank: prioOrder[prio] ?? 99 });
+      const crawlerId = crawlerIdCol ? (r[crawlerIdCol] || '').trim() : '';
+      let lastCrawled = lastCrawledCol ? (r[lastCrawledCol] || '').trim() : '';
+      // normalize to yyyy-mm-dd
+      if (lastCrawled) {
+        const d = new Date(lastCrawled);
+        if (!isNaN(d.getTime())) lastCrawled = d.toISOString().slice(0, 10);
+      }
+      items.push({ country, stop, prio, displayName, detailUrl, targetUrl, status, octo, crawlerId, lastCrawled, prioRank: prioOrder[prio] ?? 99 });
     });
     items.sort((a, b) => {
       if (a.prioRank !== b.prioRank) return a.prioRank - b.prioRank;
@@ -1079,6 +1088,7 @@ function buildDashboard() {
           <th>組織名</th>
           <th>国</th>
           <th>停止日数</th>
+          <th>最終取得日</th>
           <th>Status</th>
           <th>Account</th>
           <th>Target</th>
@@ -1095,12 +1105,16 @@ function buildDashboard() {
       const targetLink = it.targetUrl
         ? `<a href="${it.targetUrl}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;word-break:break-all;font-size:12px">${targetHost}</a>`
         : '—';
+      const copyName = (it.displayName || it.crawlerId || '').replace(/"/g, '&quot;');
       html += `<tr>
         <td class="rank-cell">${i + 1}</td>
         <td>${prioBadge}</td>
-        <td style="font-weight:600;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.displayName || '—'}</td>
-        <td>${it.country}</td>
+        <td style="font-weight:600;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <span class="action-copy" data-copy="${copyName}" title="クリックでコピー" style="cursor:pointer;border-bottom:2px dashed var(--border);padding-bottom:1px">${it.displayName || '—'}</span>
+        </td>
+        <td><span class="action-detail" data-country="${it.country.replace(/"/g,'&quot;')}" style="cursor:pointer;color:var(--blue);text-decoration:underline;font-weight:600" title="詳細を表示">${it.country}</span></td>
         <td style="font-family:var(--mono);font-weight:700;color:var(--red)">${it.stop}日</td>
+        <td>${it.lastCrawled ? `<span class="action-copy" data-copy="${it.lastCrawled}" title="クリックでコピー" style="cursor:pointer;border-bottom:2px dashed var(--border);padding-bottom:1px;font-family:var(--mono);font-size:12px">${it.lastCrawled}</span>` : '—'}</td>
         <td><span style="font-size:12px">${it.status || '—'}</span></td>
         <td style="font-size:12px">${it.octo || '—'}</td>
         <td>${targetLink}</td>
@@ -1108,6 +1122,44 @@ function buildDashboard() {
     });
     html += '</tbody></table></div>';
     panel.innerHTML = html;
+
+    // Copy crawler name on click
+    function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text).catch(() => copyFallback(text));
+      }
+      return copyFallback(text);
+    }
+    function copyFallback(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch(e) {}
+      document.body.removeChild(ta);
+      return Promise.resolve();
+    }
+    panel.querySelectorAll('.action-copy').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const text = el.dataset.copy;
+        copyText(text).then(() => {
+          const orig = el.textContent;
+          el.textContent = '✓ コピー済';
+          el.style.color = 'var(--green)';
+          setTimeout(() => { el.textContent = orig; el.style.color = ''; }, 1200);
+        });
+      });
+    });
+
+    // Open country detail on click
+    panel.querySelectorAll('.action-detail').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showDetail(el.dataset.country);
+      });
+    });
   }
 
   const TILE_COORDS = {
