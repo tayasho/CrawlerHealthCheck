@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Crawler Status Heatmap</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦜</text></svg>">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
@@ -748,6 +749,52 @@ header p {
 .action-panel .prio-badge.critical { background: var(--red-bg); color: #991B1B; }
 .action-panel .prio-badge.important { background: var(--amber-bg); color: #92400E; }
 .action-panel .prio-badge.normal { background: #E5E7EB; color: #374151; }
+
+.crawler-popup-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2000;
+}
+.crawler-popup {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 8px 8px 0 #222;
+  padding: 24px 28px;
+  max-width: 520px; width: 90%;
+  position: relative;
+}
+.crawler-popup h4 {
+  font-size: 15px; font-weight: 700; text-transform: uppercase;
+  margin: 0 0 16px; letter-spacing: .5px;
+}
+.crawler-popup .cp-close {
+  position: absolute; top: 12px; right: 14px;
+  background: none; border: none; font-size: 22px; cursor: pointer;
+  color: var(--text); font-weight: 700; line-height: 1;
+}
+.crawler-popup .cp-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 8px 0; border-bottom: 2px solid var(--bg);
+  font-size: 13px;
+}
+.crawler-popup .cp-row:last-child { border-bottom: none; }
+.crawler-popup .cp-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+  font-weight: 700; color: var(--text-muted); min-width: 100px; flex-shrink: 0;
+}
+.crawler-popup .cp-val {
+  word-break: break-all; flex: 1;
+}
+.crawler-popup .cp-copyable {
+  cursor: pointer; border-bottom: 2px dashed var(--border);
+  padding-bottom: 1px; font-family: var(--mono); font-size: 13px;
+  transition: color .15s;
+}
+.crawler-popup .cp-copyable:hover { color: var(--blue); }
+.crawler-popup .cp-link {
+  color: var(--blue); text-decoration: underline; word-break: break-all; font-size: 13px;
+}
 </style>
 </head>
 <body>
@@ -1105,12 +1152,17 @@ function buildDashboard() {
       const targetLink = it.targetUrl
         ? `<a href="${it.targetUrl}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;word-break:break-all;font-size:12px">${targetHost}</a>`
         : '—';
-      const copyName = (it.displayName || it.crawlerId || '').replace(/"/g, '&quot;');
+      const safeName = (it.displayName || '').replace(/"/g, '&quot;');
+      const safeId = (it.crawlerId || '').replace(/"/g, '&quot;');
+      const safeUrl = (it.detailUrl || '').replace(/"/g, '&quot;');
+      const safeTarget = (it.targetUrl || '').replace(/"/g, '&quot;');
+      const safeLastCrawled = (it.lastCrawled || '').replace(/"/g, '&quot;');
+      const safePrio = (it.prio || '').replace(/"/g, '&quot;');
       html += `<tr>
         <td class="rank-cell">${i + 1}</td>
         <td>${prioBadge}</td>
         <td style="font-weight:600;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-          <span class="action-copy" data-copy="${copyName}" title="クリックでコピー" style="cursor:pointer;border-bottom:2px dashed var(--border);padding-bottom:1px">${it.displayName || '—'}</span>
+          <span class="action-crawler-detail" data-name="${safeName}" data-id="${safeId}" data-url="${safeUrl}" data-target="${safeTarget}" data-last="${safeLastCrawled}" data-prio="${safePrio}" data-country="${it.country.replace(/"/g,'&quot;')}" data-stop="${it.stop}" title="クローラー詳細を表示" style="cursor:pointer;border-bottom:2px solid var(--blue);padding-bottom:1px;color:var(--blue)">${it.displayName || '—'}</span>
         </td>
         <td><span class="action-detail" data-country="${it.country.replace(/"/g,'&quot;')}" style="cursor:pointer;color:var(--blue);text-decoration:underline;font-weight:600" title="詳細を表示">${it.country}</span></td>
         <td style="font-family:var(--mono);font-weight:700;color:var(--red)">${it.stop}日</td>
@@ -1123,7 +1175,7 @@ function buildDashboard() {
     html += '</tbody></table></div>';
     panel.innerHTML = html;
 
-    // Copy crawler name on click
+    // Copy helper
     function copyText(text) {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         return navigator.clipboard.writeText(text).catch(() => copyFallback(text));
@@ -1140,16 +1192,51 @@ function buildDashboard() {
       document.body.removeChild(ta);
       return Promise.resolve();
     }
-    panel.querySelectorAll('.action-copy').forEach(el => {
+    function bindCopy(container) {
+      container.querySelectorAll('.action-copy, .cp-copyable').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const text = el.dataset.copy;
+          copyText(text).then(() => {
+            const orig = el.textContent;
+            el.textContent = '✓ コピー済';
+            el.style.color = 'var(--green)';
+            setTimeout(() => { el.textContent = orig; el.style.color = ''; }, 1200);
+          });
+        });
+      });
+    }
+    bindCopy(panel);
+
+    // Crawler detail popup
+    panel.querySelectorAll('.action-crawler-detail').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        const text = el.dataset.copy;
-        copyText(text).then(() => {
-          const orig = el.textContent;
-          el.textContent = '✓ コピー済';
-          el.style.color = 'var(--green)';
-          setTimeout(() => { el.textContent = orig; el.style.color = ''; }, 1200);
-        });
+        const d = el.dataset;
+        const overlay = document.createElement('div');
+        overlay.className = 'crawler-popup-overlay';
+        let popupHTML = `<div class="crawler-popup">
+          <button class="cp-close">&times;</button>
+          <h4>🦜 クローラー詳細</h4>
+          <div class="cp-row"><span class="cp-label">組織名</span><span class="cp-val" style="font-weight:600">${d.name || '—'}</span></div>
+          <div class="cp-row"><span class="cp-label">Crawler ID</span><span class="cp-val"><span class="cp-copyable" data-copy="${d.id}" title="クリックでコピー">${d.id || '—'}</span></span></div>
+          <div class="cp-row"><span class="cp-label">国</span><span class="cp-val">${d.country || '—'}</span></div>
+          <div class="cp-row"><span class="cp-label">優先度</span><span class="cp-val">${d.prio === '最重要' ? '<span class="prio-badge critical">最重要</span>' : '<span class="prio-badge important">重要</span>'}</span></div>
+          <div class="cp-row"><span class="cp-label">停止日数</span><span class="cp-val" style="font-family:var(--mono);font-weight:700;color:var(--red)">${d.stop}日</span></div>
+          <div class="cp-row"><span class="cp-label">最終取得日</span><span class="cp-val">${d.last ? `<span class="cp-copyable" data-copy="${d.last}" title="クリックでコピー">${d.last}</span>` : '—'}</span></div>`;
+        if (d.url) {
+          popupHTML += `<div class="cp-row"><span class="cp-label">int-slate URL</span><span class="cp-val"><a href="${d.url}" target="_blank" rel="noopener" class="cp-link">${d.url}</a></span></div>`;
+        }
+        if (d.target) {
+          popupHTML += `<div class="cp-row"><span class="cp-label">Target URL</span><span class="cp-val"><a href="${d.target}" target="_blank" rel="noopener" class="cp-link">${d.target}</a></span></div>`;
+        }
+        popupHTML += `</div>`;
+        overlay.innerHTML = popupHTML;
+        document.body.appendChild(overlay);
+
+        bindCopy(overlay);
+        overlay.querySelector('.cp-close').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
       });
     });
 
