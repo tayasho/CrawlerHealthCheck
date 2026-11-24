@@ -1339,7 +1339,8 @@ function buildDashboard() {
   function showCrawlerPopup(data) {
     const overlay = document.createElement('div');
     overlay.className = 'crawler-popup-overlay';
-    let html = `<div class="crawler-popup">
+    const today = new Date().toISOString().slice(0, 10);
+    let html = `<div class="crawler-popup" style="max-height:90vh;overflow-y:auto">
       <button class="cp-close">&times;</button>
       <h4>🦜 Crawler Details</h4>
       <div class="cp-row"><span class="cp-label">Organization</span><span class="cp-val" style="font-weight:600">${data.name || '—'}</span></div>
@@ -1356,8 +1357,44 @@ function buildDashboard() {
     if (data.target) {
       html += `<div class="cp-row"><span class="cp-label">Target URL</span><span class="cp-val"><a href="${data.target}" target="_blank" rel="noopener" class="cp-link">${data.target}</a></span></div>`;
     }
-    html += `<div style="margin-top:16px;padding-top:14px;border-top:2px solid #eee;text-align:center">
-        <button class="cp-maint-btn" style="background:#1a1a1a;color:#fff;border:3px solid #1a1a1a;border-radius:8px;padding:10px 24px;font-weight:700;font-family:inherit;font-size:14px;cursor:pointer;box-shadow:3px 3px 0 #888;transition:all .1s">📝 Record Maintenance</button>
+    html += `
+      <div style="margin-top:18px;padding-top:16px;border-top:3px solid #1a1a1a">
+        <h4 style="margin:0 0 12px;font-size:15px">📝 Record Maintenance</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Date</label>
+            <input type="date" id="cpMaintDate" value="${today}" style="width:100%;padding:8px;border:2px solid #1a1a1a;border-radius:6px;font-family:inherit;font-size:13px;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Action</label>
+            <select id="cpMaintAction" style="width:100%;padding:8px;border:2px solid #1a1a1a;border-radius:6px;font-family:inherit;font-size:13px;box-sizing:border-box">
+              <option value="再起動">Restart</option>
+              <option value="設定変更">Config Change</option>
+              <option value="URL更新">URL Update</option>
+              <option value="エラー調査">Error Investigation</option>
+              <option value="新規作成">New Creation</option>
+              <option value="その他">Other</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Result</label>
+            <select id="cpMaintResult" style="width:100%;padding:8px;border:2px solid #1a1a1a;border-radius:6px;font-family:inherit;font-size:13px;box-sizing:border-box">
+              <option value="復旧">Resolved</option>
+              <option value="未解決">Unresolved</option>
+              <option value="経過観察">Monitoring</option>
+              <option value="廃止">Retired</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">&nbsp;</label>
+            <button id="cpMaintSave" style="width:100%;padding:8px;background:#1a1a1a;color:#fff;border:2px solid #1a1a1a;border-radius:6px;font-weight:700;font-family:inherit;font-size:13px;cursor:pointer;box-shadow:2px 2px 0 #888;transition:all .1s;box-sizing:border-box">Save</button>
+          </div>
+        </div>
+        <div style="margin-top:8px">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Notes (optional)</label>
+          <textarea id="cpMaintNotes" placeholder="Enter details or notes..." style="width:100%;padding:8px;border:2px solid #1a1a1a;border-radius:6px;font-family:inherit;font-size:13px;min-height:50px;resize:vertical;box-sizing:border-box"></textarea>
+        </div>
+        <div id="cpMaintMsg" style="display:none;margin-top:8px;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:600"></div>
       </div>`;
     html += `</div>`;
     overlay.innerHTML = html;
@@ -1365,9 +1402,39 @@ function buildDashboard() {
     bindCopy(overlay);
     overlay.querySelector('.cp-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
-    overlay.querySelector('.cp-maint-btn').addEventListener('click', () => {
-      overlay.remove();
-      showMaintenanceForm(data, () => {});
+
+    overlay.querySelector('#cpMaintSave').addEventListener('click', async () => {
+      const btn = overlay.querySelector('#cpMaintSave');
+      const msg = overlay.querySelector('#cpMaintMsg');
+      btn.disabled = true; btn.textContent = 'Saving...';
+      const record = {
+        crawlerId: data.id || '',
+        crawlerName: data.name || '',
+        country: data.country || '',
+        date: overlay.querySelector('#cpMaintDate').value,
+        action: overlay.querySelector('#cpMaintAction').value,
+        result: overlay.querySelector('#cpMaintResult').value,
+        notes: overlay.querySelector('#cpMaintNotes').value.trim(),
+        createdAt: Date.now(),
+        createdBy: userId || 'unknown',
+        createdByName: userName || ''
+      };
+      try {
+        await apiPost('/api/maintenance', record);
+        msg.style.display = 'block';
+        msg.style.background = '#D1FAE5';
+        msg.style.color = '#065F46';
+        msg.textContent = '✓ Saved successfully';
+        btn.textContent = 'Saved!';
+        setTimeout(() => { btn.disabled = false; btn.textContent = 'Save'; msg.style.display = 'none'; }, 2000);
+      } catch(e) {
+        console.error('Save error:', e);
+        msg.style.display = 'block';
+        msg.style.background = '#FEE2E2';
+        msg.style.color = '#DC2626';
+        msg.textContent = 'Failed to save: ' + (e.message || '');
+        btn.disabled = false; btn.textContent = 'Save';
+      }
     });
   }
 
