@@ -1,27 +1,39 @@
 import type { NextAuthOptions } from 'next-auth';
-import GoogleProvider from 'next-auth/providers/google';
-
-const ALLOWED_DOMAIN = process.env.ALLOWED_DOMAIN || 'osintech.co.jp';
+import CredentialsProvider from 'next-auth/providers/credentials';
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    CredentialsProvider({
+      name: 'credentials',
+      credentials: {
+        email: { label: 'メールアドレス', type: 'email' },
+        password: { label: 'パスワード', type: 'password' },
+      },
+      async authorize(credentials) {
+        const validEmail = process.env.AUTH_EMAIL;
+        const validPassword = process.env.AUTH_PASSWORD;
+
+        if (!validEmail || !validPassword) {
+          console.error('AUTH_EMAIL or AUTH_PASSWORD not set');
+          return null;
+        }
+
+        if (
+          credentials?.email === validEmail &&
+          credentials?.password === validPassword
+        ) {
+          return {
+            id: '1',
+            email: validEmail,
+            name: validEmail.split('@')[0],
+          };
+        }
+
+        return null;
+      },
     }),
   ],
   callbacks: {
-    async signIn({ account, profile }) {
-      if (account?.provider === 'google') {
-        const email = profile?.email || '';
-        // Restrict to organization domain
-        if (ALLOWED_DOMAIN && !email.endsWith(`@${ALLOWED_DOMAIN}`)) {
-          return false;
-        }
-        return true;
-      }
-      return false;
-    },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.sub || '';
@@ -29,9 +41,9 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
-    async jwt({ token, profile }) {
-      if (profile) {
-        token.email = profile.email;
+    async jwt({ token, user }) {
+      if (user) {
+        token.email = user.email;
       }
       return token;
     },
@@ -39,5 +51,8 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/login',
     error: '/login',
+  },
+  session: {
+    strategy: 'jwt',
   },
 };
