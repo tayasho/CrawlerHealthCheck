@@ -646,38 +646,48 @@ header p {
   font-weight: 700;
 }
 
-.action-toggle {
-  margin-bottom: 16px;
+.tab-bar {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
-.action-toggle button {
+.tab-bar button {
+  flex: 1;
   font-family: var(--font);
   font-size: 14px;
   font-weight: 700;
-  padding: 10px 20px;
-  border: var(--border-w) solid var(--border);
-  border-radius: var(--radius);
+  padding: 12px 16px;
+  border: none;
+  border-right: var(--border-w) solid var(--border);
   cursor: pointer;
   transition: all .1s;
-  box-shadow: var(--shadow-sm);
   text-transform: uppercase;
-  background: var(--red-bg);
-  color: #991B1B;
+  background: var(--surface);
+  color: var(--text-muted);
 }
 
-.action-toggle button:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: 5px 5px 0 #222;
+.tab-bar button:last-child { border-right: none; }
+
+.tab-bar button:hover {
+  background: var(--yellow-bg);
 }
 
-.action-toggle button:active {
-  transform: translate(3px, 3px);
-  box-shadow: none;
-}
-
-.action-toggle button.active-btn {
-  background: var(--red);
+.tab-bar button.tab-active {
+  background: var(--border);
   color: #fff;
+}
+
+.tab-bar button.tab-active[data-tab="action"] {
+  background: var(--red);
+}
+
+.tab-bar button.tab-active[data-tab="maint"] {
+  background: var(--blue);
 }
 
 .action-panel {
@@ -956,15 +966,6 @@ header p {
 .maint-panel-table td { padding: 6px 8px; border-bottom: 1px solid #E5E7EB; }
 .maint-panel-empty { text-align: center; padding: 24px; color: #888; font-size: 13px; }
 .maint-panel-loading { text-align: center; padding: 16px; color: #888; font-size: 13px; }
-.maint-toggle-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--bg); color: var(--border); border: 3px solid var(--border);
-  padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;
-  cursor: pointer; box-shadow: 2px 2px 0 var(--border); margin-left: 8px;
-  transition: transform .1s, box-shadow .1s;
-}
-.maint-toggle-btn:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 var(--border); }
-.maint-toggle-btn.active-btn { background: var(--blue); color: #fff; }
 
 .maint-delete-btn {
   background: none; border: none; color: #ccc; cursor: pointer; font-size: 14px; padding: 2px 4px;
@@ -1244,12 +1245,18 @@ function buildDashboard() {
   dash.style.display = 'block';
   dash.innerHTML = `
     <div class="stats-bar" id="statsBar"></div>
-    <div class="action-toggle" id="actionToggle"></div>
-    <div id="actionPanel" style="display:none"></div>
-    <div id="maintPanel" style="display:none"></div>
-    <div class="controls" id="controls"></div>
-    <div id="searchResultsPanel" style="display:none"></div>
-    <div class="grid-container" id="grid"></div>
+    <div class="tab-bar" id="tabBar">
+      <button class="tab-active" data-tab="heatmap">🗺 Heatmap</button>
+      <button data-tab="action">⚠ Action Required</button>
+      <button data-tab="maint">📋 Maintenance Log</button>
+    </div>
+    <div id="tabHeatmap">
+      <div class="controls" id="controls"></div>
+      <div id="searchResultsPanel" style="display:none"></div>
+      <div class="grid-container" id="grid"></div>
+    </div>
+    <div id="tabAction" style="display:none"></div>
+    <div id="tabMaint" style="display:none"></div>
     <div id="detailOverlay" class="detail-overlay" style="display:none"></div>
   `;
 
@@ -1261,7 +1268,24 @@ function buildDashboard() {
   let searchQuery = '';
   let orgLang = 'en';
   let viewMode = 'tiles';
-  let showActionList = false;
+  let activeTab = 'heatmap';
+
+  // Tab switching
+  function switchTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.tab-bar button').forEach(b => {
+      b.classList.toggle('tab-active', b.dataset.tab === tab);
+    });
+    document.getElementById('tabHeatmap').style.display = tab === 'heatmap' ? '' : 'none';
+    document.getElementById('tabAction').style.display = tab === 'action' ? '' : 'none';
+    document.getElementById('tabMaint').style.display = tab === 'maint' ? '' : 'none';
+
+    if (tab === 'action') renderActionPanel();
+    if (tab === 'maint') renderMaintPanel();
+  }
+  document.querySelectorAll('.tab-bar button').forEach(b => {
+    b.addEventListener('click', () => switchTab(b.dataset.tab));
+  });
 
   // Shared copy helpers
   function copyText(text) {
@@ -1464,30 +1488,14 @@ function buildDashboard() {
     return items;
   }
 
-  function renderActionList() {
-    const toggleDiv = document.getElementById('actionToggle');
+  function renderActionPanel() {
+    const panel = document.getElementById('tabAction');
     if (!colMap.priority || !colMap.stopDays) {
-      toggleDiv.innerHTML = '';
+      panel.innerHTML = '<div class="action-panel"><p style="color:var(--text-muted);padding:16px 0">Priority column not mapped</p></div>';
       return;
     }
-    toggleDiv.innerHTML = `<button id="actionToggleBtn" class="${showActionList ? 'active-btn' : ''}">
-      ⚠ Action Required ${showActionList ? '▲' : '▼'}
-    </button><button id="maintToggleBtn" class="maint-toggle-btn${maintPanelVisible ? ' active-btn' : ''}">
-      📋 Maintenance Log ${maintPanelVisible ? '▲' : '▼'}
-    </button>`;
-    document.getElementById('actionToggleBtn').addEventListener('click', () => {
-      showActionList = !showActionList;
-      renderActionList();
-    });
-    document.getElementById('maintToggleBtn').addEventListener('click', () => {
-      toggleMaintenancePanel();
-    });
-
-    const panel = document.getElementById('actionPanel');
-    if (!showActionList) { panel.style.display = 'none'; return; }
 
     const items = getActionList();
-    panel.style.display = 'block';
     if (items.length === 0) {
       panel.innerHTML = '<div class="action-panel"><h3>⚠ Action Required</h3><p style="color:var(--text-muted);padding:16px 0">No crawlers require attention</p></div>';
       return;
@@ -1532,14 +1540,12 @@ function buildDashboard() {
 
     bindCopy(panel);
 
-    // Crawler detail popup from action list
     panel.querySelectorAll('.action-crawler-detail').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         showCrawlerPopup(el.dataset);
       });
     });
-
   }
 
   const TILE_COORDS = {
@@ -2092,7 +2098,8 @@ function buildDashboard() {
       cell.addEventListener('click', () => showDetail(cell.dataset.country));
     });
 
-    renderActionList();
+    if (activeTab === 'action') renderActionPanel();
+    if (activeTab === 'maint') renderMaintPanel();
     renderSearchResults();
   }
 
@@ -2286,7 +2293,6 @@ function buildDashboard() {
   let dbReady = true; // Always ready when logged in via Next.js auth
   let userId = null;
   let userName = null;
-  let maintPanelVisible = false;
 
   // Fetch current user info from NextAuth session
   (async () => {
@@ -2587,19 +2593,10 @@ function buildDashboard() {
     } catch(e) { console.error('Auto-recovery check error:', e); }
   }
 
-  async function toggleMaintenancePanel() {
-    maintPanelVisible = !maintPanelVisible;
-    const panel = document.getElementById('maintPanel');
+  async function renderMaintPanel() {
+    const panel = document.getElementById('tabMaint');
     if (!panel) return;
 
-    const btn = document.getElementById('maintToggleBtn');
-    if (btn) btn.className = 'maint-toggle-btn' + (maintPanelVisible ? ' active-btn' : '');
-
-    if (!maintPanelVisible) {
-      panel.style.display = 'none';
-      return;
-    }
-    panel.style.display = 'block';
     panel.innerHTML = '<div class="maint-panel"><h3>📋 All Maintenance History</h3><div class="maint-panel-loading">Loading...</div></div>';
 
     if (!db) {
@@ -2652,7 +2649,7 @@ function buildDashboard() {
         if (!logData) return;
         row.addEventListener('click', (e) => {
           if (e.target.classList.contains('maint-delete-btn')) return;
-          showEditForm(logData, () => { maintPanelVisible = false; toggleMaintenancePanel(); });
+          showEditForm(logData, () => { renderMaintPanel(); });
         });
       });
       panel.querySelectorAll('.maint-delete-btn').forEach(btn => {
@@ -2662,8 +2659,7 @@ function buildDashboard() {
           if (!confirm('Delete this record?')) return;
           try {
             await apiDelete('/api/maintenance/' + docId);
-            maintPanelVisible = false;
-            toggleMaintenancePanel();
+            renderMaintPanel();
           } catch(err) {
             alert('Failed to delete');
           }
