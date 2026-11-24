@@ -1394,6 +1394,11 @@ function buildDashboard() {
             <button id="cpMaintSave" style="width:100%;padding:8px;background:#1a1a1a;color:#fff;border:2px solid #1a1a1a;border-radius:6px;font-weight:700;font-family:inherit;font-size:13px;cursor:pointer;box-shadow:2px 2px 0 #888;transition:all .1s;box-sizing:border-box">Save</button>
           </div>
         </div>
+        <div id="cpLocalOnlyHint" style="display:none;margin-top:8px;padding:10px 12px;background:#DBEAFE;border:2px solid #1E40AF;border-radius:6px;font-size:12px;line-height:1.6;color:#1E40AF">
+          <strong>📋 Local Only procedure:</strong><br>
+          1. Move the crawler to <strong>osintech04</strong><br>
+          2. Add to <strong>Production_with_Proxy</strong> group
+        </div>
         <div style="margin-top:8px">
           <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Notes (optional)</label>
           <textarea id="cpMaintNotes" placeholder="Enter details or notes..." style="width:100%;padding:8px;border:2px solid #1a1a1a;border-radius:6px;font-family:inherit;font-size:13px;min-height:50px;resize:vertical;box-sizing:border-box"></textarea>
@@ -1404,6 +1409,12 @@ function buildDashboard() {
     overlay.innerHTML = html;
     document.body.appendChild(overlay);
     bindCopy(overlay);
+    // Show/hide Local Only instruction based on result selection
+    const cpResultSel = overlay.querySelector('#cpMaintResult');
+    const cpLocalHint = overlay.querySelector('#cpLocalOnlyHint');
+    cpResultSel.addEventListener('change', () => {
+      cpLocalHint.style.display = cpResultSel.value === 'ローカル実行' ? 'block' : 'none';
+    });
     overlay.querySelector('.cp-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
 
@@ -2495,6 +2506,11 @@ function buildDashboard() {
       <select id="maintResult">
         ${results.map(r => '<option value="'+r+'"'+(logDoc.result===r?' selected':'')+'>'+resultLabels[r]+'</option>').join('')}
       </select>
+      <div id="editLocalOnlyHint" style="display:${logDoc.result === 'ローカル実行' ? 'block' : 'none'};margin-top:8px;padding:10px 12px;background:#DBEAFE;border:2px solid #1E40AF;border-radius:6px;font-size:12px;line-height:1.6;color:#1E40AF">
+        <strong>📋 Local Only procedure:</strong><br>
+        1. Move the crawler to <strong>osintech04</strong><br>
+        2. Add to <strong>Production_with_Proxy</strong> group
+      </div>
       <label>Notes (optional)</label>
       <textarea id="maintNotes">${(logDoc.notes || '').replace(/</g,'&lt;')}</textarea>
       <div class="maint-form-actions">
@@ -2503,6 +2519,11 @@ function buildDashboard() {
       </div>
     </div>`;
     document.body.appendChild(overlay);
+    const editResultSel = overlay.querySelector('#maintResult');
+    const editLocalHint = overlay.querySelector('#editLocalOnlyHint');
+    editResultSel.addEventListener('change', () => {
+      editLocalHint.style.display = editResultSel.value === 'ローカル実行' ? 'block' : 'none';
+    });
     overlay.querySelector('.cp-close').addEventListener('click', () => overlay.remove());
     overlay.querySelector('#maintCancel').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
