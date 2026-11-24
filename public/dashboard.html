@@ -912,6 +912,7 @@ header p {
 .maint-result-badge.resolved { background: #DEF7EC; color: #065F46; }
 .maint-result-badge.unresolved { background: #FEE2E2; color: #991B1B; }
 .maint-result-badge.monitoring { background: #FEF3C7; color: #92400E; }
+.maint-result-badge.local-only { background: #DBEAFE; color: #1E40AF; }
 .maint-result-badge.retired { background: #E5E7EB; color: #374151; }
 .maint-log-item .maint-notes { margin-top: 4px; color: #555; line-height: 1.4; }
 .maint-log-item .maint-user { font-size: 10px; color: #999; margin-top: 3px; }
@@ -1384,6 +1385,7 @@ function buildDashboard() {
               <option value="復旧">Resolved</option>
               <option value="未解決">Unresolved</option>
               <option value="経過観察">Monitoring</option>
+              <option value="ローカル実行">Local Only</option>
               <option value="廃止">Retired</option>
             </select>
           </div>
@@ -2395,7 +2397,7 @@ function buildDashboard() {
 
   // Display labels for internal Japanese values (kept for DB backward compatibility)
   const actionLabels = {'再起動':'Restart','設定変更':'Config Change','URL更新':'URL Update','エラー調査':'Error Investigation','新規作成':'New Creation','自動検知':'Auto-detected','その他':'Other'};
-  const resultLabels = {'復旧':'Resolved','未解決':'Unresolved','経過観察':'Monitoring','廃止':'Retired'};
+  const resultLabels = {'復旧':'Resolved','未解決':'Unresolved','経過観察':'Monitoring','ローカル実行':'Local Only','廃止':'Retired'};
 
   function showMaintenanceForm(crawlerData, onSaved) {
     const existing = document.querySelector('.maint-form-overlay');
@@ -2475,7 +2477,7 @@ function buildDashboard() {
     const overlay = document.createElement('div');
     overlay.className = 'maint-form-overlay';
     const actions = ['再起動','設定変更','URL更新','エラー調査','新規作成','自動検知','その他'];
-    const results = ['復旧','未解決','経過観察','廃止'];
+    const results = ['復旧','未解決','経過観察','ローカル実行','廃止'];
     overlay.innerHTML = `<div class="maint-form">
       <button class="cp-close" style="position:absolute;top:10px;right:14px">&times;</button>
       <h4>✏️ Edit Record</h4>
@@ -2543,7 +2545,7 @@ function buildDashboard() {
         const createdByName = log.created_by_name || log.createdByName || '';
         const createdAt = log.created_at || log.createdAt;
         const updatedAt = log.updated_at || log.updatedAt;
-        const resultClass = log.result === '復旧' ? 'resolved' : log.result === '未解決' ? 'unresolved' : log.result === '経過観察' ? 'monitoring' : 'retired';
+        const resultClass = log.result === '復旧' ? 'resolved' : log.result === '未解決' ? 'unresolved' : log.result === '経過観察' ? 'monitoring' : log.result === 'ローカル実行' ? 'local-only' : 'retired';
         html += `<div class="maint-log-item" style="cursor:pointer" data-logid="${log.id}" title="Click to edit">
           <span class="maint-date">${log.date || '—'}</span>
           <span class="maint-action-badge">${actionLabels[log.action] || log.action || '—'}</span>
@@ -2681,7 +2683,8 @@ function buildDashboard() {
       docs.forEach(log => {
         const resultClass = log.result === '復旧' ? 'resolved' :
           log.result === '未解決' ? 'unresolved' :
-          log.result === '経過観察' ? 'monitoring' : 'retired';
+          log.result === '経過観察' ? 'monitoring' :
+          log.result === 'ローカル実行' ? 'local-only' : 'retired';
         tableHTML += `<tr class="maint-panel-row" data-logid="${log.id}" style="cursor:pointer" title="Click to edit">
           <td style="white-space:nowrap;font-family:var(--mono);font-size:11px">${log.date || '—'}</td>
           <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(log.crawlerName||'').replace(/"/g,'&quot;')}">${log.crawlerName || log.crawlerId || '—'}${log.autoRecovery ? ' 🤖' : ''}</td>
