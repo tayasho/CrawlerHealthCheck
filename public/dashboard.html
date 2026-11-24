@@ -1496,13 +1496,47 @@ function buildDashboard() {
     }
 
     const items = getActionList();
+
+    // Build account filter bar
+    let filterHTML = '';
+    if (octoAccounts.size > 0) {
+      filterHTML = `<div class="controls" style="margin-bottom:12px;padding:10px 14px">
+        <span class="group-label">Account:</span>
+        <div class="pill-group">
+          <button class="pill action-octo-all ${activeOctoAccounts.size === octoAccounts.size ? 'active' : ''}">All</button>
+          ${[...octoAccounts].sort().map(t =>
+            `<button class="pill action-octo-toggle ${activeOctoAccounts.has(t)?'active':''}" data-octo="${t}">${t}</button>`
+          ).join('')}
+        </div>
+      </div>`;
+    }
+
+    function bindActionFilters() {
+      panel.querySelectorAll('.action-octo-all').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (activeOctoAccounts.size === octoAccounts.size) activeOctoAccounts = new Set();
+          else activeOctoAccounts = new Set(octoAccounts);
+          renderActionPanel(); render();
+        });
+      });
+      panel.querySelectorAll('.action-octo-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const v = btn.dataset.octo;
+          if (activeOctoAccounts.has(v)) activeOctoAccounts.delete(v); else activeOctoAccounts.add(v);
+          renderActionPanel(); render();
+        });
+      });
+    }
+
     if (items.length === 0) {
-      panel.innerHTML = '<div class="action-panel"><h3>⚠ Action Required</h3><p style="color:var(--text-muted);padding:16px 0">No crawlers require attention</p></div>';
+      panel.innerHTML = `<div class="action-panel"><h3>⚠ Action Required</h3>${filterHTML}<p style="color:var(--text-muted);padding:16px 0">No crawlers require attention</p></div>`;
+      bindActionFilters();
       return;
     }
 
     let html = `<div class="action-panel">
       <h3>⚠ Action Required</h3>
+      ${filterHTML}
       <p class="action-desc">Sorted by Priority (Critical/Important) × Stop Days — higher = more urgent</p>
       <table class="action-table">
         <thead><tr>
@@ -1546,6 +1580,8 @@ function buildDashboard() {
         showCrawlerPopup(el.dataset);
       });
     });
+
+    bindActionFilters();
   }
 
   const TILE_COORDS = {
