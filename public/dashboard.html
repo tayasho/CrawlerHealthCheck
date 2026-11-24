@@ -1356,12 +1356,19 @@ function buildDashboard() {
     if (data.target) {
       html += `<div class="cp-row"><span class="cp-label">Target URL</span><span class="cp-val"><a href="${data.target}" target="_blank" rel="noopener" class="cp-link">${data.target}</a></span></div>`;
     }
+    html += `<div style="margin-top:16px;padding-top:14px;border-top:2px solid #eee;text-align:center">
+        <button class="cp-maint-btn" style="background:#1a1a1a;color:#fff;border:3px solid #1a1a1a;border-radius:8px;padding:10px 24px;font-weight:700;font-family:inherit;font-size:14px;cursor:pointer;box-shadow:3px 3px 0 #888;transition:all .1s">📝 Record Maintenance</button>
+      </div>`;
     html += `</div>`;
     overlay.innerHTML = html;
     document.body.appendChild(overlay);
     bindCopy(overlay);
     overlay.querySelector('.cp-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+    overlay.querySelector('.cp-maint-btn').addEventListener('click', () => {
+      overlay.remove();
+      showMaintenanceForm(data, () => {});
+    });
   }
 
   function getActionList() {
