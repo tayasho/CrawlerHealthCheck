@@ -1010,13 +1010,13 @@ header p {
 <div class="app" id="app">
   <header>
     <h1>Crawler status heatmap</h1>
-    <p>CSVをドロップして、国別クローラー稼働状況をヒートマップで可視化</p>
+    <p>Visualize crawler status by country as a heatmap</p>
   </header>
 
   <div class="drop-zone" id="dropZone">
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-    <h3>CSVファイルをドロップ or クリック</h3>
-    <p>Country, Type of Organization, 停止日数 の列が含まれるCSV</p>
+    <h3>Drop CSV file or click to upload</h3>
+    <p>CSV with Country, Type of Organization, Stop Days columns</p>
     <input type="file" id="fileInput" accept=".csv">
   </div>
 
@@ -1062,6 +1062,48 @@ dropZone.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
 
+// Auto-load: fetch the latest CSV from the server on page load
+(async function autoLoadLatestCSV() {
+  try {
+    const resp = await fetch('/api/csv-data');
+    if (!resp.ok) return;
+    const json = await resp.json();
+    if (!json.data || !json.data.csv_content) return;
+
+    const saved = json.data;
+    let text = saved.csv_content;
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const lines = parseCSV(text);
+    if (lines.length < 2) return;
+
+    headers = lines[0].map(h => h.trim());
+    rawRows = lines.slice(1).map(l => {
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = (l[i] || '').trim());
+      return obj;
+    });
+    fileName = saved.file_name || 'Previously uploaded CSV';
+
+    // Restore saved column mapping if available, otherwise auto-detect
+    if (saved.col_map && typeof saved.col_map === 'object' && saved.col_map.country) {
+      colMap = saved.col_map;
+    } else {
+      autoDetectColumns();
+    }
+
+    if (colMap.country && colMap.stopDays) {
+      // Skip mapper, go straight to dashboard
+      dropZone.style.display = 'none';
+      buildDashboard();
+    } else {
+      autoDetectColumns();
+      showMapper();
+    }
+  } catch (e) {
+    console.log('No saved CSV data, showing upload UI');
+  }
+})();
+
 function parseCSV(text) {
   const rows = [];
   let current = '';
@@ -1086,12 +1128,14 @@ function parseCSV(text) {
   return lines.filter(l => l.some(c => c.trim()));
 }
 
+let _lastCsvText = '';
 function handleFile(file) {
   fileName = file.name;
   const reader = new FileReader();
   reader.onload = e => {
     let text = e.target.result;
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    _lastCsvText = text;
     const lines = parseCSV(text);
     if (lines.length < 2) return;
     headers = lines[0].map(h => h.trim());
@@ -1104,6 +1148,15 @@ function handleFile(file) {
     showMapper();
   };
   reader.readAsText(file, 'UTF-8');
+}
+
+function saveCSVToServer() {
+  if (!_lastCsvText) return;
+  fetch('/api/csv-data', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileName, csvContent: _lastCsvText, colMap })
+  }).catch(e => console.error('Failed to save CSV:', e));
 }
 
 function autoDetectColumns() {
@@ -1123,40 +1176,40 @@ function showMapper() {
   const opts = h => headers.map(col => `<option value="${col}" ${col === h ? 'selected' : ''}>${col}</option>`).join('');
   sec.innerHTML = `
     <div class="column-mapper">
-      <h3>カラムマッピング</h3>
+      <h3>Column Mapping</h3>
       <div class="mapper-grid">
         <div class="mapper-field">
-          <label>Country（国名）</label>
-          <select id="selCountry"><option value="">-- 選択 --</option>${opts(colMap.country)}</select>
+          <label>Country</label>
+          <select id="selCountry"><option value="">-- Select --</option>${opts(colMap.country)}</select>
           ${colMap.country ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
         </div>
         <div class="mapper-field">
           <label>Type of Organization</label>
-          <select id="selOrgType"><option value="">-- 選択（任意）--</option>${opts(colMap.orgType)}</select>
+          <select id="selOrgType"><option value="">-- Select (optional) --</option>${opts(colMap.orgType)}</select>
           ${colMap.orgType ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
         </div>
         <div class="mapper-field">
-          <label>停止日数</label>
-          <select id="selStopDays"><option value="">-- 選択 --</option>${opts(colMap.stopDays)}</select>
+          <label>Stop Days</label>
+          <select id="selStopDays"><option value="">-- Select --</option>${opts(colMap.stopDays)}</select>
           ${colMap.stopDays ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
         </div>
         <div class="mapper-field">
-          <label>Status（任意）</label>
-          <select id="selStatus"><option value="">-- 選択（任意）--</option>${opts(colMap.status)}</select>
+          <label>Status (optional)</label>
+          <select id="selStatus"><option value="">-- Select (optional) --</option>${opts(colMap.status)}</select>
           ${colMap.status ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
         </div>
         <div class="mapper-field">
-          <label>Octoparse Account（任意）</label>
-          <select id="selOctoAccount"><option value="">-- 選択（任意）--</option>${opts(colMap.octoAccount)}</select>
+          <label>Octoparse Account (optional)</label>
+          <select id="selOctoAccount"><option value="">-- Select (optional) --</option>${opts(colMap.octoAccount)}</select>
           ${colMap.octoAccount ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
         </div>
         <div class="mapper-field">
-          <label>優先度（任意）</label>
-          <select id="selPriority"><option value="">-- 選択（任意）--</option>${opts(colMap.priority)}</select>
+          <label>Priority (optional)</label>
+          <select id="selPriority"><option value="">-- Select (optional) --</option>${opts(colMap.priority)}</select>
           ${colMap.priority ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
         </div>
       </div>
-      <button class="apply-btn" id="applyBtn">適用してヒートマップを表示</button>
+      <button class="apply-btn" id="applyBtn">Apply & Show Heatmap</button>
     </div>
   `;
   document.getElementById('applyBtn').addEventListener('click', () => {
@@ -1167,10 +1220,11 @@ function showMapper() {
     colMap.octoAccount = document.getElementById('selOctoAccount').value;
     colMap.priority = document.getElementById('selPriority').value;
     if (!colMap.country || !colMap.stopDays) {
-      alert('Country と 停止日数 は必須です');
+      alert('Country and Stop Days are required');
       return;
     }
     sec.style.display = 'none';
+    saveCSVToServer();
     buildDashboard();
   });
 }
@@ -1183,7 +1237,7 @@ function buildDashboard() {
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       <span class="filename">${fileName}</span>
       <span class="meta">${rawRows.length} rows</span>
-      <button class="reset-btn" id="resetBtn">リセット</button>
+      <button class="reset-btn" id="resetBtn">Reset</button>
     </div>
   `;
   document.getElementById('resetBtn').addEventListener('click', () => {
@@ -1274,7 +1328,7 @@ function buildDashboard() {
         const text = el.dataset.copy;
         copyText(text).then(() => {
           const orig = el.textContent;
-          el.textContent = '✓ コピー済';
+          el.textContent = '✓ Copied';
           el.style.color = 'var(--green)';
           setTimeout(() => { el.textContent = orig; el.style.color = ''; }, 1200);
         });
@@ -1287,15 +1341,15 @@ function buildDashboard() {
     overlay.className = 'crawler-popup-overlay';
     let html = `<div class="crawler-popup">
       <button class="cp-close">&times;</button>
-      <h4>🦜 クローラー詳細</h4>
-      <div class="cp-row"><span class="cp-label">組織名</span><span class="cp-val" style="font-weight:600">${data.name || '—'}</span></div>
-      <div class="cp-row"><span class="cp-label">Crawler ID</span><span class="cp-val"><span class="cp-copyable" data-copy="${data.id || ''}" title="クリックでコピー">${data.id || '—'}</span></span></div>
-      <div class="cp-row"><span class="cp-label">国</span><span class="cp-val">${data.country || '—'}</span></div>`;
+      <h4>🦜 Crawler Details</h4>
+      <div class="cp-row"><span class="cp-label">Organization</span><span class="cp-val" style="font-weight:600">${data.name || '—'}</span></div>
+      <div class="cp-row"><span class="cp-label">Crawler ID</span><span class="cp-val"><span class="cp-copyable" data-copy="${data.id || ''}" title="Click to copy">${data.id || '—'}</span></span></div>
+      <div class="cp-row"><span class="cp-label">Country</span><span class="cp-val">${data.country || '—'}</span></div>`;
     if (data.prio) {
-      html += `<div class="cp-row"><span class="cp-label">優先度</span><span class="cp-val">${data.prio === '最重要' ? '<span class="prio-badge critical">最重要</span>' : data.prio === '重要' ? '<span class="prio-badge important">重要</span>' : data.prio}</span></div>`;
+      html += `<div class="cp-row"><span class="cp-label">Priority</span><span class="cp-val">${data.prio === '最重要' ? '<span class="prio-badge critical">Critical</span>' : data.prio === '重要' ? '<span class="prio-badge important">Important</span>' : data.prio}</span></div>`;
     }
-    html += `<div class="cp-row"><span class="cp-label">停止日数</span><span class="cp-val" style="font-family:var(--mono);font-weight:700;color:${parseInt(data.stop) > 0 ? 'var(--red)' : '#16A34A'}">${data.stop}日</span></div>
-      <div class="cp-row"><span class="cp-label">最終取得日</span><span class="cp-val">${data.last ? `<span class="cp-copyable" data-copy="${data.last}" title="クリックでコピー">${data.last}</span>` : '—'}</span></div>`;
+    html += `<div class="cp-row"><span class="cp-label">Stop Days</span><span class="cp-val" style="font-family:var(--mono);font-weight:700;color:${parseInt(data.stop) > 0 ? 'var(--red)' : '#16A34A'}">${data.stop} days</span></div>
+      <div class="cp-row"><span class="cp-label">Last Crawled</span><span class="cp-val">${data.last ? `<span class="cp-copyable" data-copy="${data.last}" title="Click to copy">${data.last}</span>` : '—'}</span></div>`;
     if (data.url) {
       html += `<div class="cp-row"><span class="cp-label">int-slate URL</span><span class="cp-val"><a href="${data.url}" target="_blank" rel="noopener" class="cp-link">${data.url}</a></span></div>`;
     }
@@ -1384,9 +1438,9 @@ function buildDashboard() {
       return;
     }
     toggleDiv.innerHTML = `<button id="actionToggleBtn" class="${showActionList ? 'active-btn' : ''}">
-      ⚠ 要対応クローラー一覧 ${showActionList ? '▲' : '▼'}
+      ⚠ Action Required ${showActionList ? '▲' : '▼'}
     </button><button id="maintToggleBtn" class="maint-toggle-btn${maintPanelVisible ? ' active-btn' : ''}">
-      📋 メンテナンス履歴 ${maintPanelVisible ? '▲' : '▼'}
+      📋 Maintenance Log ${maintPanelVisible ? '▲' : '▼'}
     </button>`;
     document.getElementById('actionToggleBtn').addEventListener('click', () => {
       showActionList = !showActionList;
@@ -1402,27 +1456,27 @@ function buildDashboard() {
     const items = getActionList();
     panel.style.display = 'block';
     if (items.length === 0) {
-      panel.innerHTML = '<div class="action-panel"><h3>⚠ 要対応クローラー</h3><p style="color:var(--text-muted);padding:16px 0">該当するクローラーはありません</p></div>';
+      panel.innerHTML = '<div class="action-panel"><h3>⚠ Action Required</h3><p style="color:var(--text-muted);padding:16px 0">No crawlers require attention</p></div>';
       return;
     }
 
     let html = `<div class="action-panel">
-      <h3>⚠ 要対応クローラー</h3>
-      <p class="action-desc">優先度（最重要・重要）× 停止日数でソート — 上位ほど緊急度が高い</p>
+      <h3>⚠ Action Required</h3>
+      <p class="action-desc">Sorted by Priority (Critical/Important) × Stop Days — higher = more urgent</p>
       <table class="action-table">
         <thead><tr>
           <th>#</th>
-          <th>優先度</th>
-          <th>組織名</th>
-          <th>停止日数</th>
-          <th>最終取得日</th>
+          <th>Priority</th>
+          <th>Organization</th>
+          <th>Stop Days</th>
+          <th>Last Crawled</th>
           <th>Account</th>
         </tr></thead>
         <tbody>`;
     items.forEach((it, i) => {
       const prioBadge = it.prio === '最重要'
-        ? '<span class="prio-badge critical">最重要</span>'
-        : '<span class="prio-badge important">重要</span>';
+        ? '<span class="prio-badge critical">Critical</span>'
+        : '<span class="prio-badge important">Important</span>';
       const safeName = (it.displayName || '').replace(/"/g, '&quot;');
       const safeId = (it.crawlerId || '').replace(/"/g, '&quot;');
       const safeUrl = (it.detailUrl || '').replace(/"/g, '&quot;');
@@ -1433,10 +1487,10 @@ function buildDashboard() {
         <td class="rank-cell">${i + 1}</td>
         <td>${prioBadge}</td>
         <td style="font-weight:600;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-          <span class="action-crawler-detail" data-name="${safeName}" data-id="${safeId}" data-url="${safeUrl}" data-target="${safeTarget}" data-last="${safeLastCrawled}" data-prio="${safePrio}" data-country="${it.country.replace(/"/g,'&quot;')}" data-stop="${it.stop}" title="クローラー詳細を表示" style="cursor:pointer;border-bottom:2px solid var(--blue);padding-bottom:1px;color:var(--blue)">${it.displayName || '—'}</span>
+          <span class="action-crawler-detail" data-name="${safeName}" data-id="${safeId}" data-url="${safeUrl}" data-target="${safeTarget}" data-last="${safeLastCrawled}" data-prio="${safePrio}" data-country="${it.country.replace(/"/g,'&quot;')}" data-stop="${it.stop}" title="Show crawler details" style="cursor:pointer;border-bottom:2px solid var(--blue);padding-bottom:1px;color:var(--blue)">${it.displayName || '—'}</span>
         </td>
-        <td style="font-family:var(--mono);font-weight:700;color:var(--red)">${it.stop}日</td>
-        <td>${it.lastCrawled ? `<span class="action-copy" data-copy="${it.lastCrawled}" title="クリックでコピー" style="cursor:pointer;border-bottom:2px dashed var(--border);padding-bottom:1px;font-family:var(--mono);font-size:12px">${it.lastCrawled}</span>` : '—'}</td>
+        <td style="font-family:var(--mono);font-weight:700;color:var(--red)">${it.stop} days</td>
+        <td>${it.lastCrawled ? `<span class="action-copy" data-copy="${it.lastCrawled}" title="Click to copy" style="cursor:pointer;border-bottom:2px dashed var(--border);padding-bottom:1px;font-family:var(--mono);font-size:12px">${it.lastCrawled}</span>` : '—'}</td>
         <td style="font-size:12px">${it.octo || '—'}</td>
       </tr>`;
     });
@@ -1542,17 +1596,17 @@ function buildDashboard() {
 
   // Regional boundaries for cartogram overlay
   const REGION_BOUNDS = {
-    "北米": { color: "#3B82F6", countries: ["Canada","USA","Mexico"] },
-    "中米・カリブ": { color: "#8B5CF6", countries: ["Guatemala","Belize","El Salvador","Honduras","Nicaragua","Costa Rica","Panama","Cuba","Jamaica","Haiti","Dominican Republic","Bahamas","Trinidad and Tobago","Barbados","Saint Lucia","Saint Vincent and the Grenadines"] },
-    "南米": { color: "#6366F1", countries: ["Colombia","Ecuador","Peru","Venezuela","Guyana","Brazil","Bolivia","Paraguay","Chile","Argentina","Suriname","Uruguay"] },
-    "ヨーロッパ": { color: "#2563EB", countries: ["Iceland","Norway","Sweden","Finland","Denmark","UK","Ireland","Netherlands","Belgium","Luxembourg","France","Spain","Portugal","Germany","Switzerland","Austria","Czech Republic","Poland","Slovakia","Hungary","Slovenia","Italy","Croatia","Serbia","Montenegro","North Macedonia","Greece","Albania","Romania","Bulgaria","Moldova","Estonia","Latvia","Lithuania","Ukraine","Belarus","Russia","EU","Cyprus","Republic of Kosovo"] },
-    "中東": { color: "#D97706", countries: ["Turkey","Lebanon","Syria","Iraq","Iran","Saudi Arabia","Yemen","Oman","UAE","United Arab Emirates","Kuwait","Qatar","Bahrain","Jordan","Israel","State of Palestine"] },
-    "アフリカ": { color: "#DC2626", countries: ["Morocco","Algeria","Tunisia","Libya","Egypt","Western Sahara","Mauritania","Senegal","Gambia","Guinea-Bissau","Guinea","Sierra Leone","Liberia","Mali","Niger","Burkina Faso","Togo","Côte d'Ivoire","Ghana","Benin","Nigeria","Cape Verde","Chad","Sudan","Eritrea","Central African Republic","Cameroon","Equatorial Guinea","Gabon","Congo-Brazzaville","Congo-Kinshasa","South Sudan","Ethiopia","Somalia","Djibouti","Kenya","Uganda","Rwanda","Burundi","Tanzania","Angola","Zambia","Malawi","Comoros","Mozambique","Botswana","Zimbabwe","Namibia","South Africa","Eswatini","Lesotho","Madagascar","Seychelles","Mauritius","Africa","Other(Africa)"] },
-    "中央アジア・コーカサス": { color: "#9333EA", countries: ["Georgia","Azerbaijan","Kazakhstan","Uzbekistan","Turkmenistan","Kyrgyzstan","Tajikistan","Afghanistan"] },
-    "南アジア": { color: "#059669", countries: ["India","Pakistan","Nepal","Bangladesh","Sri Lanka","Maldives","Bhutan"] },
-    "東南アジア": { color: "#0891B2", countries: ["Myanmar","Thailand","Laos","Vietnam","Cambodia","Malaysia","Singapore","Indonesia","Philippines","Brunei Darussalam","East Timor","Other(ASEAN)"] },
-    "東アジア": { color: "#E11D48", countries: ["Mongolia","China","Japan","Korea","North Korea","Taiwan","Hong Kong"] },
-    "オセアニア": { color: "#7C3AED", countries: ["Australia","New Zealand","Fiji","Solomon Islands","Papua New Guinea","Samoa","American Samoa","Tonga","Kiribati","Tuvalu","Marshall Islands","Micronesia","Palau","Oceania"] },
+    "North America": { color: "#3B82F6", countries: ["Canada","USA","Mexico"] },
+    "Central America & Caribbean": { color: "#8B5CF6", countries: ["Guatemala","Belize","El Salvador","Honduras","Nicaragua","Costa Rica","Panama","Cuba","Jamaica","Haiti","Dominican Republic","Bahamas","Trinidad and Tobago","Barbados","Saint Lucia","Saint Vincent and the Grenadines"] },
+    "South America": { color: "#6366F1", countries: ["Colombia","Ecuador","Peru","Venezuela","Guyana","Brazil","Bolivia","Paraguay","Chile","Argentina","Suriname","Uruguay"] },
+    "Europe": { color: "#2563EB", countries: ["Iceland","Norway","Sweden","Finland","Denmark","UK","Ireland","Netherlands","Belgium","Luxembourg","France","Spain","Portugal","Germany","Switzerland","Austria","Czech Republic","Poland","Slovakia","Hungary","Slovenia","Italy","Croatia","Serbia","Montenegro","North Macedonia","Greece","Albania","Romania","Bulgaria","Moldova","Estonia","Latvia","Lithuania","Ukraine","Belarus","Russia","EU","Cyprus","Republic of Kosovo"] },
+    "Middle East": { color: "#D97706", countries: ["Turkey","Lebanon","Syria","Iraq","Iran","Saudi Arabia","Yemen","Oman","UAE","United Arab Emirates","Kuwait","Qatar","Bahrain","Jordan","Israel","State of Palestine"] },
+    "Africa": { color: "#DC2626", countries: ["Morocco","Algeria","Tunisia","Libya","Egypt","Western Sahara","Mauritania","Senegal","Gambia","Guinea-Bissau","Guinea","Sierra Leone","Liberia","Mali","Niger","Burkina Faso","Togo","Côte d'Ivoire","Ghana","Benin","Nigeria","Cape Verde","Chad","Sudan","Eritrea","Central African Republic","Cameroon","Equatorial Guinea","Gabon","Congo-Brazzaville","Congo-Kinshasa","South Sudan","Ethiopia","Somalia","Djibouti","Kenya","Uganda","Rwanda","Burundi","Tanzania","Angola","Zambia","Malawi","Comoros","Mozambique","Botswana","Zimbabwe","Namibia","South Africa","Eswatini","Lesotho","Madagascar","Seychelles","Mauritius","Africa","Other(Africa)"] },
+    "Central Asia & Caucasus": { color: "#9333EA", countries: ["Georgia","Azerbaijan","Kazakhstan","Uzbekistan","Turkmenistan","Kyrgyzstan","Tajikistan","Afghanistan"] },
+    "South Asia": { color: "#059669", countries: ["India","Pakistan","Nepal","Bangladesh","Sri Lanka","Maldives","Bhutan"] },
+    "Southeast Asia": { color: "#0891B2", countries: ["Myanmar","Thailand","Laos","Vietnam","Cambodia","Malaysia","Singapore","Indonesia","Philippines","Brunei Darussalam","East Timor","Other(ASEAN)"] },
+    "East Asia": { color: "#E11D48", countries: ["Mongolia","China","Japan","Korea","North Korea","Taiwan","Hong Kong"] },
+    "Oceania": { color: "#7C3AED", countries: ["Australia","New Zealand","Fiji","Solomon Islands","Papua New Guinea","Samoa","American Samoa","Tonga","Kiribati","Tuvalu","Marshall Islands","Micronesia","Palau","Oceania"] },
   };
 
   // Header columns for search
@@ -1684,26 +1738,26 @@ function buildDashboard() {
     results.sort((a, b) => b.stop - a.stop);
 
     let html = `<div class="search-results-panel">`;
-    html += `<h3>🔍 検索結果 <span class="sr-count">${results.length} 件のクローラー</span></h3>`;
+    html += `<h3>🔍 Search Results <span class="sr-count">${results.length} crawlers</span></h3>`;
     html += `<table><thead><tr>
       <th>#</th>
-      <th>組織名</th>
-      <th>国</th>
-      <th>ステータス</th>
-      <th>停止日数</th>
-      <th>最終取得日</th>
+      <th>Organization</th>
+      <th>Country</th>
+      <th>Status</th>
+      <th>Stop Days</th>
+      <th>Last Crawled</th>
       <th>Crawler ID</th>
     </tr></thead><tbody>`;
     results.forEach((it, i) => {
       const isActive = it.stop <= 0;
-      const statusLabel = isActive ? '稼働中' : '停止中';
+      const statusLabel = isActive ? 'Active' : 'Stopped';
       const statusCls = isActive ? 'active' : 'stopped';
       html += `<tr>
         <td>${i + 1}</td>
         <td><span class="sr-org" data-name="${(it.orgName || it.displayName).replace(/"/g,'&quot;')}" data-id="${it.id}" data-country="${it.country}" data-stop="${it.stop}" data-last="${it.lastCrawled}" data-url="${it.url}" data-target="${it.target}" data-prio="${it.prio}">${it.displayName}</span></td>
         <td>${it.country}</td>
         <td><span class="sr-status ${statusCls}">${statusLabel}</span></td>
-        <td>${it.stop > 0 ? it.stop + '日' : '—'}</td>
+        <td>${it.stop > 0 ? it.stop + ' days' : '—'}</td>
         <td>${it.lastCrawled || '—'}</td>
         <td style="font-family:var(--mono);font-size:12px">${it.id || '—'}</td>
       </tr>`;
@@ -1789,7 +1843,7 @@ function buildDashboard() {
     if (priorityTypes.size > 0) {
       ctrlHTML += `
         <div class="separator"></div>
-        <span class="group-label">優先度:</span>
+        <span class="group-label">Priority:</span>
         <div class="pill-group">
           <button class="pill prio-all ${activePriorityTypes.size === priorityTypes.size ? 'active' : ''}">All</button>
           ${[...priorityTypes].sort().map(t =>
@@ -1800,16 +1854,16 @@ function buildDashboard() {
     }
     ctrlHTML += `
       <div class="separator"></div>
-      <span class="group-label">Org名:</span>
+      <span class="group-label">Org Name:</span>
       <div class="pill-group">
         <button class="pill lang-toggle ${orgLang==='en'?'active':''}" data-lang="en">EN</button>
-        <button class="pill lang-toggle ${orgLang==='ja'?'active':''}" data-lang="ja">日本語</button>
+        <button class="pill lang-toggle ${orgLang==='ja'?'active':''}" data-lang="ja">JP</button>
       </div>
     `;
     ctrlHTML += `
       <div class="search-box">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="searchInput" placeholder="国名 / クローラー名 / ID / URL で検索..." value="${searchQuery}">
+        <input type="text" id="searchInput" placeholder="Search by country / crawler / ID / URL..." value="${searchQuery}">
       </div>
     `;
     document.getElementById('controls').innerHTML = ctrlHTML;
@@ -1904,7 +1958,7 @@ function buildDashboard() {
       grid.classList.remove('cartogram-mode');
     }
     if (entries.length === 0) {
-      grid.innerHTML = '<div class="empty-state"><h3>No data to display</h3><p>フィルターを変更してください</p></div>';
+      grid.innerHTML = '<div class="empty-state"><h3>No data to display</h3><p>Try adjusting your filters</p></div>';
       return;
     }
 
@@ -1957,7 +2011,7 @@ function buildDashboard() {
           <span class="num">—</span>
           <div class="tooltip">
             <div class="tt-name">${name}</div>
-            <div class="tt-row"><span class="tt-label">クローラーなし</span></div>
+            <div class="tt-row"><span class="tt-label">No crawlers</span></div>
           </div>
         </div>`;
       });
@@ -2063,13 +2117,13 @@ function buildDashboard() {
     tableHTML += '<th>Status</th>';
     tableHTML += '<th>Organization</th>';
     if (orgTypeCol) tableHTML += '<th>Type</th>';
-    if (prioCol) tableHTML += '<th>優先度</th>';
+    if (prioCol) tableHTML += '<th>Priority</th>';
     if (octoCol) tableHTML += '<th>Account</th>';
-    tableHTML += '<th>停止日数</th>';
-    if (freqCol) tableHTML += '<th>更新頻度</th>';
+    tableHTML += '<th>Stop Days</th>';
+    if (freqCol) tableHTML += '<th>Update Freq.</th>';
     if (statusCol) tableHTML += '<th>Publish</th>';
     tableHTML += '<th>Target</th>';
-    tableHTML += '<th style="text-align:center">記録</th>';
+    tableHTML += '<th style="text-align:center">Log</th>';
     tableHTML += '</tr></thead><tbody>';
 
     rows.forEach(r => {
@@ -2109,7 +2163,7 @@ function buildDashboard() {
         + 'data-url="' + esc(detailUrl) + '" '
         + 'data-target="' + esc(targetUrl) + '" '
         + 'data-prio="' + esc(pv2) + '" '
-        + 'title="クローラー詳細を表示" style="cursor:pointer;color:var(--blue);border-bottom:2px solid var(--blue);padding-bottom:1px">'
+        + 'title="Show crawler details" style="cursor:pointer;color:var(--blue);border-bottom:2px solid var(--blue);padding-bottom:1px">'
         + displayName + '</span>';
 
       tableHTML += '<tr>';
@@ -2216,7 +2270,7 @@ function buildDashboard() {
           nav.style.cssText = 'display:flex;align-items:center;gap:10px;margin-top:10px';
           nav.innerHTML = '<span style="font-size:13px;font-weight:600">👤 ' + (userName||'').replace(/</g,'&lt;') + '</span>'
             + '<button onclick="fetch(\'/api/auth/signout\',{method:\'POST\'}).then(()=>location.href=\'/login\')" '
-            + 'style="padding:4px 12px;background:#fee2e2;border:2px solid #1a1a1a;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">ログアウト</button>';
+            + 'style="padding:4px 12px;background:#fee2e2;border:2px solid #1a1a1a;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">Logout</button>';
           header.appendChild(nav);
         }
       }
@@ -2245,6 +2299,10 @@ function buildDashboard() {
     return res.json();
   }
 
+  // Display labels for internal Japanese values (kept for DB backward compatibility)
+  const actionLabels = {'再起動':'Restart','設定変更':'Config Change','URL更新':'URL Update','エラー調査':'Error Investigation','新規作成':'New Creation','自動検知':'Auto-detected','その他':'Other'};
+  const resultLabels = {'復旧':'Resolved','未解決':'Unresolved','経過観察':'Monitoring','廃止':'Retired'};
+
   function showMaintenanceForm(crawlerData, onSaved) {
     const existing = document.querySelector('.maint-form-overlay');
     if (existing) existing.remove();
@@ -2254,34 +2312,34 @@ function buildDashboard() {
     overlay.className = 'maint-form-overlay';
     overlay.innerHTML = `<div class="maint-form">
       <button class="cp-close" style="position:absolute;top:10px;right:14px">&times;</button>
-      <h4>📝 メンテナンス記録</h4>
+      <h4>📝 Maintenance Record</h4>
       <div class="maint-form-info">
         <strong>${(crawlerData.name || crawlerData.id || '—').replace(/</g,'&lt;')}</strong>
         ${crawlerData.country ? ' / ' + crawlerData.country : ''}
       </div>
-      <label>日付</label>
+      <label>Date</label>
       <input type="date" id="maintDate" value="${today}">
-      <label>作業内容</label>
+      <label>Action</label>
       <select id="maintAction">
-        <option value="再起動">再起動</option>
-        <option value="設定変更">設定変更</option>
-        <option value="URL更新">URL更新</option>
-        <option value="エラー調査">エラー調査</option>
-        <option value="新規作成">新規作成</option>
-        <option value="その他">その他</option>
+        <option value="再起動">Restart</option>
+        <option value="設定変更">Config Change</option>
+        <option value="URL更新">URL Update</option>
+        <option value="エラー調査">Error Investigation</option>
+        <option value="新規作成">New Creation</option>
+        <option value="その他">Other</option>
       </select>
-      <label>結果</label>
+      <label>Result</label>
       <select id="maintResult">
-        <option value="復旧">復旧</option>
-        <option value="未解決">未解決</option>
-        <option value="経過観察">経過観察</option>
-        <option value="廃止">廃止</option>
+        <option value="復旧">Resolved</option>
+        <option value="未解決">Unresolved</option>
+        <option value="経過観察">Monitoring</option>
+        <option value="廃止">Retired</option>
       </select>
-      <label>メモ（任意）</label>
-      <textarea id="maintNotes" placeholder="作業の詳細やメモを入力..."></textarea>
+      <label>Notes (optional)</label>
+      <textarea id="maintNotes" placeholder="Enter details or notes..."></textarea>
       <div class="maint-form-actions">
-        <button class="btn-cancel" id="maintCancel">キャンセル</button>
-        <button class="btn-save" id="maintSave">保存</button>
+        <button class="btn-cancel" id="maintCancel">Cancel</button>
+        <button class="btn-save" id="maintSave">Save</button>
       </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -2292,7 +2350,7 @@ function buildDashboard() {
 
     overlay.querySelector('#maintSave').addEventListener('click', async () => {
       const btn = overlay.querySelector('#maintSave');
-      btn.disabled = true; btn.textContent = '保存中...';
+      btn.disabled = true; btn.textContent = 'Saving...';
       const record = {
         crawlerId: crawlerData.id || '',
         crawlerName: crawlerData.name || '',
@@ -2311,8 +2369,8 @@ function buildDashboard() {
         if (onSaved) onSaved();
       } catch(e) {
         console.error('Save error:', e);
-        alert('保存に失敗しました: ' + (e.message || ''));
-        btn.disabled = false; btn.textContent = '保存';
+        alert('Failed to save: ' + (e.message || ''));
+        btn.disabled = false; btn.textContent = 'Save';
       }
     });
   }
@@ -2326,26 +2384,26 @@ function buildDashboard() {
     const results = ['復旧','未解決','経過観察','廃止'];
     overlay.innerHTML = `<div class="maint-form">
       <button class="cp-close" style="position:absolute;top:10px;right:14px">&times;</button>
-      <h4>✏️ 記録を編集</h4>
+      <h4>✏️ Edit Record</h4>
       <div class="maint-form-info">
         <strong>${(logDoc.crawlerName || logDoc.crawlerId || '—').replace(/</g,'&lt;')}</strong>
         ${logDoc.country ? ' / ' + logDoc.country : ''}
       </div>
-      <label>日付</label>
+      <label>Date</label>
       <input type="date" id="maintDate" value="${logDoc.date || ''}">
-      <label>作業内容</label>
+      <label>Action</label>
       <select id="maintAction">
-        ${actions.map(a => '<option value="'+a+'"'+(logDoc.action===a?' selected':'')+'>'+a+'</option>').join('')}
+        ${actions.map(a => '<option value="'+a+'"'+(logDoc.action===a?' selected':'')+'>'+actionLabels[a]+'</option>').join('')}
       </select>
-      <label>結果</label>
+      <label>Result</label>
       <select id="maintResult">
-        ${results.map(r => '<option value="'+r+'"'+(logDoc.result===r?' selected':'')+'>'+r+'</option>').join('')}
+        ${results.map(r => '<option value="'+r+'"'+(logDoc.result===r?' selected':'')+'>'+resultLabels[r]+'</option>').join('')}
       </select>
-      <label>メモ（任意）</label>
+      <label>Notes (optional)</label>
       <textarea id="maintNotes">${(logDoc.notes || '').replace(/</g,'&lt;')}</textarea>
       <div class="maint-form-actions">
-        <button class="btn-cancel" id="maintCancel">キャンセル</button>
-        <button class="btn-save" id="maintSave">更新</button>
+        <button class="btn-cancel" id="maintCancel">Cancel</button>
+        <button class="btn-save" id="maintSave">Update</button>
       </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -2354,7 +2412,7 @@ function buildDashboard() {
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     overlay.querySelector('#maintSave').addEventListener('click', async () => {
       const btn = overlay.querySelector('#maintSave');
-      btn.disabled = true; btn.textContent = '更新中...';
+      btn.disabled = true; btn.textContent = 'Updating...';
       try {
         await apiPut('/api/maintenance/' + logDoc.id, {
           date: overlay.querySelector('#maintDate').value,
@@ -2366,8 +2424,8 @@ function buildDashboard() {
         if (onSaved) onSaved();
       } catch(e) {
         console.error('Update error:', e);
-        alert('更新に失敗しました: ' + (e.message || ''));
-        btn.disabled = false; btn.textContent = '更新';
+        alert('Failed to update: ' + (e.message || ''));
+        btn.disabled = false; btn.textContent = 'Update';
       }
     });
   }
@@ -2375,14 +2433,14 @@ function buildDashboard() {
   async function loadCountryHistory(country, detailOverlay) {
     const container = detailOverlay.querySelector('#detailMaintHistory');
     if (!container) return;
-    container.innerHTML = '<h5>📋 メンテナンス履歴</h5><p class="maint-history-empty">読み込み中...</p>';
+    container.innerHTML = '<h5>📋 Maintenance History</h5><p class="maint-history-empty">Loading...</p>';
     try {
       const docs = await apiGet('/api/maintenance?country=' + encodeURIComponent(country) + '&limit=30');
       if (docs.length === 0) {
-        container.innerHTML = '<h5>📋 メンテナンス履歴</h5><p class="maint-history-empty">この国の記録はまだありません</p>';
+        container.innerHTML = '<h5>📋 Maintenance History</h5><p class="maint-history-empty">No records for this country yet</p>';
         return;
       }
-      let html = '<h5>📋 メンテナンス履歴 (' + docs.length + '件)</h5>';
+      let html = '<h5>📋 Maintenance History (' + docs.length + ' records)</h5>';
       docs.forEach(log => {
         // Normalize snake_case from Postgres to camelCase
         const crawlerName = log.crawler_name || log.crawlerName || '';
@@ -2392,17 +2450,17 @@ function buildDashboard() {
         const createdAt = log.created_at || log.createdAt;
         const updatedAt = log.updated_at || log.updatedAt;
         const resultClass = log.result === '復旧' ? 'resolved' : log.result === '未解決' ? 'unresolved' : log.result === '経過観察' ? 'monitoring' : 'retired';
-        html += `<div class="maint-log-item" style="cursor:pointer" data-logid="${log.id}" title="クリックで編集">
+        html += `<div class="maint-log-item" style="cursor:pointer" data-logid="${log.id}" title="Click to edit">
           <span class="maint-date">${log.date || '—'}</span>
-          <span class="maint-action-badge">${log.action || '—'}</span>
-          <span class="maint-result-badge ${resultClass}">${log.result || '—'}</span>
+          <span class="maint-action-badge">${actionLabels[log.action] || log.action || '—'}</span>
+          <span class="maint-result-badge ${resultClass}">${resultLabels[log.result] || log.result || '—'}</span>
           <strong style="font-size:11px;margin-left:6px">${(crawlerName || crawlerId || '').replace(/</g,'&lt;')}</strong>
-          ${autoRecovery ? '<span style="font-size:10px;color:#065F46;margin-left:4px">🤖自動</span>' : ''}
+          ${autoRecovery ? '<span style="font-size:10px;color:#065F46;margin-left:4px">🤖Auto</span>' : ''}
           ${log.notes ? '<div class="maint-notes">' + log.notes.replace(/</g,'&lt;') + '</div>' : ''}
           <div class="maint-user">
-            ${createdByName || '—'} · ${createdAt ? new Date(createdAt).toLocaleString('ja-JP') : ''}
-            ${updatedAt ? ' (編集: ' + new Date(updatedAt).toLocaleString('ja-JP') + ')' : ''}
-            <button class="maint-delete-btn" data-id="${log.id}" title="削除" style="margin-left:8px">×</button>
+            ${createdByName || '—'} · ${createdAt ? new Date(createdAt).toLocaleString('en-US') : ''}
+            ${updatedAt ? ' (edited: ' + new Date(updatedAt).toLocaleString('en-US') + ')' : ''}
+            <button class="maint-delete-btn" data-id="${log.id}" title="Delete" style="margin-left:8px">×</button>
           </div>
         </div>`;
       });
@@ -2424,16 +2482,16 @@ function buildDashboard() {
       container.querySelectorAll('.maint-delete-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (!confirm('この記録を削除しますか？')) return;
+          if (!confirm('Delete this record?')) return;
           try {
             await apiDelete('/api/maintenance/' + btn.dataset.id);
             loadCountryHistory(country, detailOverlay);
-          } catch(err) { alert('削除に失敗しました'); }
+          } catch(err) { alert('Failed to delete'); }
         });
       });
     } catch(e) {
       console.error('Load country history error:', e);
-      container.innerHTML = '<h5>📋 メンテナンス履歴</h5><p class="maint-history-empty">読み込みエラー</p>';
+      container.innerHTML = '<h5>📋 Maintenance History</h5><p class="maint-history-empty">Loading error</p>';
     }
   }
 
@@ -2478,7 +2536,7 @@ function buildDashboard() {
             date: today,
             action: '自動検知',
             result: '復旧',
-            notes: '経過観察中のクローラーがCSV更新時にアクティブ状態を確認。自動的に復旧記録を作成。',
+            notes: 'Crawler under monitoring confirmed active on CSV update. Auto-recovery record created.',
             autoRecovery: true,
             originalLogId: logData.id
           });
@@ -2489,7 +2547,7 @@ function buildDashboard() {
       if (recoveredCount > 0) {
         const notif = document.createElement('div');
         notif.style.cssText = 'position:fixed;top:20px;right:20px;background:#DEF7EC;border:3px solid #065F46;border-radius:10px;padding:12px 20px;font-size:13px;font-weight:700;color:#065F46;z-index:10002;box-shadow:4px 4px 0 #065F46;transition:opacity .5s';
-        notif.textContent = '✅ ' + recoveredCount + '件のクローラーが復旧しました（自動検知）';
+        notif.textContent = '✅ ' + recoveredCount + ' crawler(s) recovered (auto-detected)';
         document.body.appendChild(notif);
         setTimeout(() => { notif.style.opacity = '0'; setTimeout(() => notif.remove(), 600); }, 4000);
       }
@@ -2509,10 +2567,10 @@ function buildDashboard() {
       return;
     }
     panel.style.display = 'block';
-    panel.innerHTML = '<div class="maint-panel"><h3>📋 全メンテナンス履歴</h3><div class="maint-panel-loading">読み込み中...</div></div>';
+    panel.innerHTML = '<div class="maint-panel"><h3>📋 All Maintenance History</h3><div class="maint-panel-loading">Loading...</div></div>';
 
     if (!db) {
-      panel.innerHTML = '<div class="maint-panel"><h3>📋 全メンテナンス履歴</h3><div class="maint-panel-empty">データベースに接続できません。Artifact上で閲覧してください。</div></div>';
+      panel.innerHTML = '<div class="maint-panel"><h3>📋 All Maintenance History</h3><div class="maint-panel-empty">Cannot connect to database.</div></div>';
       return;
     }
 
@@ -2527,27 +2585,27 @@ function buildDashboard() {
       }));
 
       if (docs.length === 0) {
-        panel.innerHTML = '<div class="maint-panel"><h3>📋 全メンテナンス履歴</h3><div class="maint-panel-empty">まだ記録がありません</div></div>';
+        panel.innerHTML = '<div class="maint-panel"><h3>📋 All Maintenance History</h3><div class="maint-panel-empty">No records yet</div></div>';
         return;
       }
 
-      let tableHTML = `<div class="maint-panel"><h3>📋 全メンテナンス履歴 (${docs.length}件)</h3>
+      let tableHTML = `<div class="maint-panel"><h3>📋 All Maintenance History (${docs.length} records)</h3>
         <div style="overflow-x:auto"><table class="maint-panel-table">
-        <thead><tr><th>日付</th><th>クローラー</th><th>国</th><th>作業</th><th>結果</th><th>メモ</th><th>担当</th><th></th></tr></thead><tbody>`;
+        <thead><tr><th>Date</th><th>Crawler</th><th>Country</th><th>Action</th><th>Result</th><th>Notes</th><th>By</th><th></th></tr></thead><tbody>`;
 
       docs.forEach(log => {
         const resultClass = log.result === '復旧' ? 'resolved' :
           log.result === '未解決' ? 'unresolved' :
           log.result === '経過観察' ? 'monitoring' : 'retired';
-        tableHTML += `<tr class="maint-panel-row" data-logid="${log.id}" style="cursor:pointer" title="クリックで編集">
+        tableHTML += `<tr class="maint-panel-row" data-logid="${log.id}" style="cursor:pointer" title="Click to edit">
           <td style="white-space:nowrap;font-family:var(--mono);font-size:11px">${log.date || '—'}</td>
           <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(log.crawlerName||'').replace(/"/g,'&quot;')}">${log.crawlerName || log.crawlerId || '—'}${log.autoRecovery ? ' 🤖' : ''}</td>
           <td>${log.country || '—'}</td>
-          <td><span class="maint-action-badge">${log.action || '—'}</span></td>
-          <td><span class="maint-result-badge ${resultClass}">${log.result || '—'}</span></td>
+          <td><span class="maint-action-badge">${actionLabels[log.action] || log.action || '—'}</span></td>
+          <td><span class="maint-result-badge ${resultClass}">${resultLabels[log.result] || log.result || '—'}</span></td>
           <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(log.notes||'').replace(/"/g,'&quot;')}">${log.notes ? log.notes.replace(/</g,'&lt;') : '—'}</td>
           <td style="font-size:11px">${log.createdByName || '—'}</td>
-          <td><button class="maint-delete-btn" data-id="${log.id}" title="削除">×</button></td>
+          <td><button class="maint-delete-btn" data-id="${log.id}" title="Delete">×</button></td>
         </tr>`;
       });
 
@@ -2568,19 +2626,19 @@ function buildDashboard() {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
           const docId = btn.dataset.id;
-          if (!confirm('この記録を削除しますか？')) return;
+          if (!confirm('Delete this record?')) return;
           try {
             await apiDelete('/api/maintenance/' + docId);
             maintPanelVisible = false;
             toggleMaintenancePanel();
           } catch(err) {
-            alert('削除に失敗しました');
+            alert('Failed to delete');
           }
         });
       });
     } catch(e) {
       console.error('Load all logs error:', e);
-      panel.innerHTML = '<div class="maint-panel"><h3>📋 全メンテナンス履歴</h3><div class="maint-panel-empty">読み込みエラー</div></div>';
+      panel.innerHTML = '<div class="maint-panel"><h3>📋 All Maintenance History</h3><div class="maint-panel-empty">Loading error</div></div>';
     }
   }
 

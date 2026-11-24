@@ -31,4 +31,16 @@ export async function initDb() {
   await sql`CREATE INDEX IF NOT EXISTS idx_maint_country ON maintenance_logs(country)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_maint_result ON maintenance_logs(result)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_maint_crawler_id ON maintenance_logs(crawler_id)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS csv_uploads (
+      id SERIAL PRIMARY KEY,
+      file_name TEXT NOT NULL DEFAULT '',
+      csv_content TEXT NOT NULL,
+      col_map JSONB NOT NULL DEFAULT '{}',
+      uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+      uploaded_by TEXT NOT NULL DEFAULT ''
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_csv_uploaded_at ON csv_uploads(uploaded_at DESC)`;
 }

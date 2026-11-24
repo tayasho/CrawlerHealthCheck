@@ -25,7 +25,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (result?.error) {
-      setError('メールアドレスまたはパスワードが正しくありません');
+      setError('Invalid email address or password');
     } else {
       router.push('/');
     }
@@ -53,13 +53,13 @@ export default function LoginPage() {
           🕷️ Crawler Health Check
         </h1>
         <p style={{ color: '#666', fontSize: '14px', marginBottom: '32px', textAlign: 'center' }}>
-          RuleWatcher クローラー管理ダッシュボード
+          RuleWatcher Crawler Management Dashboard
         </p>
 
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-              メールアドレス
+              Email
             </label>
             <input
               type="email"
@@ -82,7 +82,7 @@ export default function LoginPage() {
 
           <div style={{ marginBottom: '24px' }}>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-              パスワード
+              Password
             </label>
             <input
               type="password"
@@ -148,7 +148,7 @@ export default function LoginPage() {
               t.style.boxShadow = '4px 4px 0 #888';
             }}
           >
-            {loading ? 'ログイン中...' : 'ログイン'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
       </div>
