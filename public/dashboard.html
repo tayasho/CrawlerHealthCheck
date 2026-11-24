@@ -1,0 +1,2594 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crawler Status Heatmap</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦜</text></svg>">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --bg: #F5F0E8;
+  --surface: #FFFFFF;
+  --border: #222222;
+  --border-w: 3px;
+  --shadow: 5px 5px 0 #222;
+  --shadow-sm: 3px 3px 0 #222;
+  --text: #222222;
+  --text-muted: #555555;
+  --text-dim: #999999;
+  --green: #22C55E;
+  --green-bg: #BBFAD0;
+  --red: #EF4444;
+  --red-bg: #FDCECE;
+  --amber: #F59E0B;
+  --amber-bg: #FDE68A;
+  --blue: #3B82F6;
+  --blue-bg: #BFDBFE;
+  --pink: #EC4899;
+  --pink-bg: #FBCFE8;
+  --purple: #8B5CF6;
+  --purple-bg: #DDD6FE;
+  --yellow: #FACC15;
+  --yellow-bg: #FEF9C3;
+  --font: 'Space Grotesk', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+  --radius: 0px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+.app {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+header {
+  margin-bottom: 32px;
+}
+
+header h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+header p {
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.drop-zone {
+  border: var(--border-w) dashed var(--border);
+  border-radius: var(--radius);
+  padding: 48px 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .15s;
+  background: var(--surface);
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+}
+
+.drop-zone:hover, .drop-zone.dragover {
+  background: var(--yellow-bg);
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 #222;
+}
+
+.drop-zone svg { margin-bottom: 12px; }
+
+.drop-zone h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.drop-zone p {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.drop-zone input { display: none; }
+
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-card .label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+  font-weight: 700;
+}
+
+.stat-card .value {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.stat-card .value.green { color: #16A34A; }
+.stat-card .value.red { color: var(--red); }
+.stat-card .value.amber { color: #D97706; }
+
+.controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.controls .group-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin-right: 2px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.pill-group {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: all .1s;
+  white-space: nowrap;
+  box-shadow: 2px 2px 0 #222;
+}
+
+.pill:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 #222;
+}
+
+.pill:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.pill.active {
+  background: var(--yellow);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.separator {
+  width: 3px;
+  height: 24px;
+  background: var(--border);
+  margin: 0 6px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 10px;
+  margin-left: auto;
+  box-shadow: 2px 2px 0 #222;
+}
+
+.search-box input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 0;
+  width: 160px;
+}
+
+.search-box input::placeholder { color: var(--text-dim); }
+
+.search-box svg { flex-shrink: 0; }
+
+.grid-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.grid-container.cartogram-mode {
+  display: grid;
+  grid-template-columns: repeat(30, 1fr);
+  grid-template-rows: repeat(30, 1fr);
+  gap: 3px;
+  width: 100%;
+  aspect-ratio: 30 / 15;
+  position: relative;
+}
+.region-outline {
+  border: 2px dashed;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.55;
+  position: relative;
+  margin: -2px;
+}
+.region-label {
+  position: absolute;
+  top: -11px;
+  left: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+  z-index: 5;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  background: rgba(255,253,247,.85);
+}
+
+.grid-container.cartogram-mode .cell {
+  min-width: 0;
+  padding: 2px 2px;
+  grid-column: var(--gc);
+  grid-row: var(--gr);
+  border-width: 2px;
+  box-shadow: 2px 2px 0 #222;
+}
+
+.grid-container.cartogram-mode .cell .name {
+  font-size: 9px;
+  max-width: none;
+}
+
+.grid-container.cartogram-mode .cell .num {
+  font-size: 8px;
+}
+.cell.cell-empty {
+  background: #e5e5e5 !important;
+  color: #999 !important;
+  border-color: #ccc !important;
+  box-shadow: 1px 1px 0 #bbb !important;
+  opacity: 0.7;
+}
+.cell.cell-empty .name {
+  color: #888 !important;
+}
+.cell.cell-empty .num {
+  color: #aaa !important;
+}
+
+.cell {
+  border-radius: var(--radius);
+  padding: 6px 7px;
+  min-width: 64px;
+  text-align: center;
+  cursor: default;
+  position: relative;
+  transition: transform .1s, box-shadow .1s;
+  border: var(--border-w) solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.cell:hover {
+  transform: translate(-2px, -2px);
+  z-index: 10;
+  box-shadow: 6px 6px 0 #222;
+}
+
+.cell .name {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  max-width: 72px;
+  color: #222 !important;
+}
+
+.cell .num {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  opacity: .85;
+}
+
+.tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+  text-align: left;
+  color: var(--text);
+}
+
+.tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--border);
+}
+
+.cell:hover .tooltip { display: block; }
+
+.tooltip .tt-name {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.tooltip .tt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 1px 0;
+}
+
+.tooltip .tt-label { color: var(--text-muted); font-weight: 500; }
+.tooltip .tt-val { font-family: var(--mono); font-weight: 700; }
+.tooltip .tt-val.g { color: #16A34A; }
+.tooltip .tt-val.r { color: var(--red); }
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+}
+
+.empty-state h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+
+.column-mapper {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+}
+
+.column-mapper h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+.mapper-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.mapper-field label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--text);
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.mapper-field select {
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  box-shadow: 2px 2px 0 #222;
+}
+
+.mapper-field select:focus {
+  background: var(--yellow-bg);
+}
+
+.mapper-field .auto-detected {
+  font-size: 10px;
+  color: #16A34A;
+  margin-top: 2px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.apply-btn {
+  margin-top: 14px;
+  padding: 10px 24px;
+  background: var(--yellow);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .1s;
+  box-shadow: var(--shadow-sm);
+  text-transform: uppercase;
+}
+
+.apply-btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 #222;
+}
+
+.apply-btn:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--blue-bg);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.file-info .filename {
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.file-info .meta {
+  color: var(--text-muted);
+}
+
+.file-info .reset-btn {
+  margin-left: auto;
+  padding: 5px 14px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .1s;
+  box-shadow: 2px 2px 0 #222;
+}
+
+.file-info .reset-btn:hover {
+  background: var(--red-bg);
+}
+
+.org-filter-section {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 200;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 48px 16px;
+  overflow-y: auto;
+}
+
+.detail-panel {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 900px;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  padding: 24px;
+  box-shadow: 8px 8px 0 #222;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.detail-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.detail-header .detail-summary {
+  display: flex;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.detail-header .detail-summary span {
+  font-family: var(--mono);
+}
+
+.detail-close {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 20px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .1s;
+  flex-shrink: 0;
+  margin-left: 16px;
+  box-shadow: 2px 2px 0 #222;
+  font-weight: 700;
+}
+
+.detail-close:hover {
+  background: var(--red-bg);
+}
+
+.detail-close:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.detail-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--text);
+  padding: 10px 10px;
+  border-bottom: var(--border-w) solid var(--border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  font-weight: 700;
+}
+
+.detail-table td {
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--bg);
+  vertical-align: top;
+}
+
+.detail-table tr:hover td {
+  background: var(--yellow-bg);
+}
+
+.detail-table .org-name {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-table .org-name a {
+  color: var(--blue);
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 2px solid var(--blue);
+}
+
+.detail-table .org-name a:hover {
+  background: var(--blue-bg);
+}
+
+.badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: var(--radius);
+  font-weight: 700;
+  border: 2px solid var(--border);
+  text-transform: uppercase;
+}
+
+.badge-active {
+  background: var(--green-bg);
+  color: #15803D;
+}
+
+.badge-stopped {
+  background: var(--red-bg);
+  color: #B91C1C;
+}
+
+.stop-days {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.action-toggle {
+  margin-bottom: 16px;
+}
+
+.action-toggle button {
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 20px;
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all .1s;
+  box-shadow: var(--shadow-sm);
+  text-transform: uppercase;
+  background: var(--red-bg);
+  color: #991B1B;
+}
+
+.action-toggle button:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 #222;
+}
+
+.action-toggle button:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+.action-toggle button.active-btn {
+  background: var(--red);
+  color: #fff;
+}
+
+.action-panel {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+}
+.search-results-panel {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+}
+.search-results-panel h3 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.search-results-panel .sr-count {
+  font-weight: 400;
+  color: #666;
+  font-size: 13px;
+}
+.search-results-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.search-results-panel th {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 2px solid var(--border);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.search-results-panel td {
+  padding: 7px 6px;
+  border-bottom: 1px solid #e5e5e5;
+  vertical-align: middle;
+}
+.search-results-panel tr:hover td {
+  background: #f8f5ee;
+}
+.search-results-panel .sr-org {
+  cursor: pointer;
+  font-weight: 600;
+  border-bottom: 2px dashed var(--border);
+}
+.search-results-panel .sr-org:hover {
+  color: var(--accent);
+}
+.search-results-panel .sr-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.search-results-panel .sr-status.active {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.search-results-panel .sr-status.stopped {
+  background: var(--red-bg);
+  color: #991B1B;
+}
+
+.action-panel h3 {
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.action-panel .action-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  font-weight: 500;
+}
+
+.action-panel .action-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.action-panel .action-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--text);
+  padding: 10px 10px;
+  border-bottom: var(--border-w) solid var(--border);
+  white-space: nowrap;
+  font-weight: 700;
+  background: var(--surface);
+}
+
+.action-panel .action-table td {
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--bg);
+  vertical-align: top;
+}
+
+.action-panel .action-table tr:hover td {
+  background: var(--yellow-bg);
+}
+
+.action-panel .action-table .rank-cell {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+  width: 40px;
+}
+
+.action-panel .prio-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.action-panel .prio-badge.critical { background: var(--red-bg); color: #991B1B; }
+.action-panel .prio-badge.important { background: var(--amber-bg); color: #92400E; }
+.action-panel .prio-badge.normal { background: #E5E7EB; color: #374151; }
+
+.crawler-popup-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2000;
+}
+.crawler-popup {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 8px 8px 0 #222;
+  padding: 24px 28px;
+  max-width: 520px; width: 90%;
+  position: relative;
+}
+.crawler-popup h4 {
+  font-size: 15px; font-weight: 700; text-transform: uppercase;
+  margin: 0 0 16px; letter-spacing: .5px;
+}
+.crawler-popup .cp-close {
+  position: absolute; top: 12px; right: 14px;
+  background: none; border: none; font-size: 22px; cursor: pointer;
+  color: var(--text); font-weight: 700; line-height: 1;
+}
+.crawler-popup .cp-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 8px 0; border-bottom: 2px solid var(--bg);
+  font-size: 13px;
+}
+.crawler-popup .cp-row:last-child { border-bottom: none; }
+.crawler-popup .cp-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+  font-weight: 700; color: var(--text-muted); min-width: 100px; flex-shrink: 0;
+}
+.crawler-popup .cp-val {
+  word-break: break-all; flex: 1;
+}
+.crawler-popup .cp-copyable {
+  cursor: pointer; border-bottom: 2px dashed var(--border);
+  padding-bottom: 1px; font-family: var(--mono); font-size: 13px;
+  transition: color .15s;
+}
+.crawler-popup .cp-copyable:hover { color: var(--blue); }
+.crawler-popup .cp-link {
+  color: var(--blue); text-decoration: underline; word-break: break-all; font-size: 13px;
+}
+
+/* Maintenance record UI */
+.maint-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--blue); color: #fff; border: 3px solid var(--border);
+  padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700;
+  cursor: pointer; margin-top: 12px; box-shadow: 2px 2px 0 var(--border);
+  transition: transform .1s, box-shadow .1s;
+}
+.maint-btn:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 var(--border); }
+.maint-btn:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 var(--border); }
+.maint-btn.secondary {
+  background: var(--bg); color: var(--border); font-size: 12px;
+  padding: 6px 12px; margin-top: 8px;
+}
+
+.maint-history { margin-top: 14px; border-top: 2px dashed var(--border); padding-top: 10px; }
+.maint-history h5 { font-size: 13px; font-weight: 800; margin: 0 0 8px; }
+.maint-history-empty { font-size: 12px; color: #888; font-style: italic; }
+.maint-log-item {
+  background: #FEFCF5; border: 2px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; margin-bottom: 6px; font-size: 12px; position: relative;
+}
+.maint-log-item .maint-date { font-weight: 700; font-family: var(--mono); font-size: 11px; }
+.maint-log-item .maint-action-badge {
+  display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 10px;
+  font-weight: 700; border: 2px solid var(--border); margin-left: 6px;
+}
+.maint-log-item .maint-result-badge {
+  display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 10px;
+  font-weight: 700; margin-left: 4px;
+}
+.maint-result-badge.resolved { background: #DEF7EC; color: #065F46; }
+.maint-result-badge.unresolved { background: #FEE2E2; color: #991B1B; }
+.maint-result-badge.monitoring { background: #FEF3C7; color: #92400E; }
+.maint-result-badge.retired { background: #E5E7EB; color: #374151; }
+.maint-log-item .maint-notes { margin-top: 4px; color: #555; line-height: 1.4; }
+.maint-log-item .maint-user { font-size: 10px; color: #999; margin-top: 3px; }
+
+/* Maintenance form modal */
+.maint-form-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 10001;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.maint-form {
+  background: var(--bg); border: 3px solid var(--border); border-radius: 14px;
+  padding: 24px; max-width: 420px; width: 100%; box-shadow: 6px 6px 0 var(--border);
+  position: relative; max-height: 90vh; overflow-y: auto;
+}
+.maint-form h4 { margin: 0 0 16px; font-size: 16px; }
+.maint-form label { display: block; font-size: 12px; font-weight: 700; margin: 10px 0 4px; }
+.maint-form input, .maint-form select, .maint-form textarea {
+  width: 100%; padding: 8px 10px; border: 3px solid var(--border); border-radius: 8px;
+  font-size: 13px; font-family: inherit; background: #fff; box-sizing: border-box;
+}
+.maint-form textarea { resize: vertical; min-height: 60px; }
+.maint-form select { cursor: pointer; }
+.maint-form .maint-form-actions { display: flex; gap: 8px; margin-top: 16px; }
+.maint-form .maint-form-actions button { flex: 1; }
+.maint-form .btn-cancel {
+  background: #E5E7EB; color: #374151; border: 3px solid var(--border);
+  padding: 8px; border-radius: 8px; font-weight: 700; font-size: 13px;
+  cursor: pointer; box-shadow: 2px 2px 0 var(--border);
+}
+.maint-form .btn-save {
+  background: #16A34A; color: #fff; border: 3px solid var(--border);
+  padding: 8px; border-radius: 8px; font-weight: 700; font-size: 13px;
+  cursor: pointer; box-shadow: 2px 2px 0 var(--border);
+}
+.maint-form .btn-save:disabled { opacity: .5; cursor: not-allowed; }
+.maint-form .maint-form-info {
+  font-size: 11px; color: #888; padding: 4px 8px; background: #F3F4F6;
+  border-radius: 6px; margin-bottom: 10px;
+}
+
+/* All maintenance logs panel */
+.maint-panel {
+  background: var(--bg); border: 3px solid var(--border); border-radius: 14px;
+  padding: 20px; margin-top: 12px; box-shadow: 4px 4px 0 var(--border);
+}
+.maint-panel h3 { margin: 0 0 14px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.maint-panel-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.maint-panel-table th {
+  text-align: left; padding: 6px 8px; border-bottom: 3px solid var(--border);
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
+}
+.maint-panel-table td { padding: 6px 8px; border-bottom: 1px solid #E5E7EB; }
+.maint-panel-empty { text-align: center; padding: 24px; color: #888; font-size: 13px; }
+.maint-panel-loading { text-align: center; padding: 16px; color: #888; font-size: 13px; }
+.maint-toggle-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bg); color: var(--border); border: 3px solid var(--border);
+  padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;
+  cursor: pointer; box-shadow: 2px 2px 0 var(--border); margin-left: 8px;
+  transition: transform .1s, box-shadow .1s;
+}
+.maint-toggle-btn:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 var(--border); }
+.maint-toggle-btn.active-btn { background: var(--blue); color: #fff; }
+
+.maint-delete-btn {
+  background: none; border: none; color: #ccc; cursor: pointer; font-size: 14px; padding: 2px 4px;
+}
+.maint-delete-btn:hover { color: var(--red); }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <h1>Crawler status heatmap</h1>
+    <p>CSVをドロップして、国別クローラー稼働状況をヒートマップで可視化</p>
+  </header>
+
+  <div class="drop-zone" id="dropZone">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <h3>CSVファイルをドロップ or クリック</h3>
+    <p>Country, Type of Organization, 停止日数 の列が含まれるCSV</p>
+    <input type="file" id="fileInput" accept=".csv">
+  </div>
+
+  <div id="mapperSection" style="display:none"></div>
+  <div id="fileInfoSection" style="display:none"></div>
+  <div id="dashboard" style="display:none"></div>
+</div>
+
+<script>
+const COLORS = [
+  { max: 0,   bg: '#BBFAD0', text: '#15803D', label: '0%' },
+  { max: 15,  bg: '#86EFAC', text: '#14532D', label: '~15%' },
+  { max: 25,  bg: '#BEF264', text: '#365314', label: '~25%' },
+  { max: 35,  bg: '#FDE68A', text: '#713F12', label: '~35%' },
+  { max: 50,  bg: '#FDBA74', text: '#7C2D12', label: '~50%' },
+  { max: 65,  bg: '#FCA5A5', text: '#7F1D1D', label: '~65%' },
+  { max: 80,  bg: '#FDA4AF', text: '#881337', label: '~80%' },
+  { max: 100, bg: '#FCA5A5', text: '#991B1B', label: '100%' },
+];
+
+function getColorForPct(pct) {
+  for (const c of COLORS) {
+    if (pct <= c.max) return c;
+  }
+  return COLORS[COLORS.length - 1];
+}
+
+let rawRows = [];
+let headers = [];
+let colMap = { country: '', orgType: '', stopDays: '', status: '', octoAccount: '', priority: '' };
+let fileName = '';
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+function parseCSV(text) {
+  const rows = [];
+  let current = '';
+  let inQuotes = false;
+  const lines = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      if (inQuotes && text[i+1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if ((ch === ',' ) && !inQuotes) {
+      rows.push(current); current = '';
+    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (ch === '\r' && text[i+1] === '\n') i++;
+      rows.push(current); current = '';
+      lines.push([...rows]); rows.length = 0;
+    } else {
+      current += ch;
+    }
+  }
+  if (current || rows.length) { rows.push(current); lines.push([...rows]); }
+  return lines.filter(l => l.some(c => c.trim()));
+}
+
+function handleFile(file) {
+  fileName = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    let text = e.target.result;
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const lines = parseCSV(text);
+    if (lines.length < 2) return;
+    headers = lines[0].map(h => h.trim());
+    rawRows = lines.slice(1).map(l => {
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = (l[i] || '').trim());
+      return obj;
+    });
+    autoDetectColumns();
+    showMapper();
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function autoDetectColumns() {
+  const lower = headers.map(h => h.toLowerCase());
+  colMap.country = headers[lower.findIndex(h => h === 'country')] || '';
+  colMap.orgType = headers[lower.findIndex(h => h.includes('type') && h.includes('org'))] || '';
+  colMap.stopDays = headers[lower.findIndex(h => h.includes('停止日数') || h === 'stop days' || h === 'stopdays')] || '';
+  colMap.status = headers[lower.findIndex(h => h === 'status')] || '';
+  colMap.octoAccount = headers[lower.findIndex(h => h.includes('octoparse') && h.includes('account'))] || '';
+  colMap.priority = headers[lower.findIndex(h => h === '優先度' || h === 'priority')] || '';
+}
+
+function showMapper() {
+  dropZone.style.display = 'none';
+  const sec = document.getElementById('mapperSection');
+  sec.style.display = 'block';
+  const opts = h => headers.map(col => `<option value="${col}" ${col === h ? 'selected' : ''}>${col}</option>`).join('');
+  sec.innerHTML = `
+    <div class="column-mapper">
+      <h3>カラムマッピング</h3>
+      <div class="mapper-grid">
+        <div class="mapper-field">
+          <label>Country（国名）</label>
+          <select id="selCountry"><option value="">-- 選択 --</option>${opts(colMap.country)}</select>
+          ${colMap.country ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
+        </div>
+        <div class="mapper-field">
+          <label>Type of Organization</label>
+          <select id="selOrgType"><option value="">-- 選択（任意）--</option>${opts(colMap.orgType)}</select>
+          ${colMap.orgType ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
+        </div>
+        <div class="mapper-field">
+          <label>停止日数</label>
+          <select id="selStopDays"><option value="">-- 選択 --</option>${opts(colMap.stopDays)}</select>
+          ${colMap.stopDays ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
+        </div>
+        <div class="mapper-field">
+          <label>Status（任意）</label>
+          <select id="selStatus"><option value="">-- 選択（任意）--</option>${opts(colMap.status)}</select>
+          ${colMap.status ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
+        </div>
+        <div class="mapper-field">
+          <label>Octoparse Account（任意）</label>
+          <select id="selOctoAccount"><option value="">-- 選択（任意）--</option>${opts(colMap.octoAccount)}</select>
+          ${colMap.octoAccount ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
+        </div>
+        <div class="mapper-field">
+          <label>優先度（任意）</label>
+          <select id="selPriority"><option value="">-- 選択（任意）--</option>${opts(colMap.priority)}</select>
+          ${colMap.priority ? '<div class="auto-detected">✓ auto-detected</div>' : ''}
+        </div>
+      </div>
+      <button class="apply-btn" id="applyBtn">適用してヒートマップを表示</button>
+    </div>
+  `;
+  document.getElementById('applyBtn').addEventListener('click', () => {
+    colMap.country = document.getElementById('selCountry').value;
+    colMap.orgType = document.getElementById('selOrgType').value;
+    colMap.stopDays = document.getElementById('selStopDays').value;
+    colMap.status = document.getElementById('selStatus').value;
+    colMap.octoAccount = document.getElementById('selOctoAccount').value;
+    colMap.priority = document.getElementById('selPriority').value;
+    if (!colMap.country || !colMap.stopDays) {
+      alert('Country と 停止日数 は必須です');
+      return;
+    }
+    sec.style.display = 'none';
+    buildDashboard();
+  });
+}
+
+function buildDashboard() {
+  const fileInfoSec = document.getElementById('fileInfoSection');
+  fileInfoSec.style.display = 'block';
+  fileInfoSec.innerHTML = `
+    <div class="file-info">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span class="filename">${fileName}</span>
+      <span class="meta">${rawRows.length} rows</span>
+      <button class="reset-btn" id="resetBtn">リセット</button>
+    </div>
+  `;
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    fileInfoSec.style.display = 'none';
+    document.getElementById('dashboard').style.display = 'none';
+    dropZone.style.display = '';
+    fileInput.value = '';
+  });
+
+  const orgTypes = new Set();
+  if (colMap.orgType) {
+    rawRows.forEach(r => {
+      const v = (r[colMap.orgType] || '').trim();
+      if (v) orgTypes.add(v);
+    });
+  }
+
+  const statusTypes = new Set();
+  if (colMap.status) {
+    rawRows.forEach(r => {
+      const v = (r[colMap.status] || '').trim();
+      if (v) statusTypes.add(v);
+    });
+  }
+
+  const octoAccounts = new Set();
+  if (colMap.octoAccount) {
+    rawRows.forEach(r => {
+      const v = (r[colMap.octoAccount] || '').trim();
+      if (v) v.split(';').forEach(a => { const t = a.trim(); if (t) octoAccounts.add(t); });
+      else octoAccounts.add('(empty)');
+    });
+  }
+
+  const priorityTypes = new Set();
+  if (colMap.priority) {
+    rawRows.forEach(r => {
+      const v = (r[colMap.priority] || '').trim();
+      if (v) priorityTypes.add(v);
+      else priorityTypes.add('(empty)');
+    });
+  }
+
+  const dash = document.getElementById('dashboard');
+  dash.style.display = 'block';
+  dash.innerHTML = `
+    <div class="stats-bar" id="statsBar"></div>
+    <div class="action-toggle" id="actionToggle"></div>
+    <div id="actionPanel" style="display:none"></div>
+    <div id="maintPanel" style="display:none"></div>
+    <div class="controls" id="controls"></div>
+    <div id="searchResultsPanel" style="display:none"></div>
+    <div class="grid-container" id="grid"></div>
+    <div id="detailOverlay" class="detail-overlay" style="display:none"></div>
+  `;
+
+  let activeOrgTypes = new Set(orgTypes);
+  let activeStatusTypes = new Set(statusTypes);
+  let activeOctoAccounts = new Set(octoAccounts);
+  let activePriorityTypes = new Set(priorityTypes);
+  let sortBy = 'total';
+  let searchQuery = '';
+  let orgLang = 'en';
+  let viewMode = 'tiles';
+  let showActionList = false;
+
+  // Shared copy helpers
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(() => copyFallback(text));
+    }
+    return copyFallback(text);
+  }
+  function copyFallback(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+    return Promise.resolve();
+  }
+  function bindCopy(container) {
+    container.querySelectorAll('.action-copy, .cp-copyable').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const text = el.dataset.copy;
+        copyText(text).then(() => {
+          const orig = el.textContent;
+          el.textContent = '✓ コピー済';
+          el.style.color = 'var(--green)';
+          setTimeout(() => { el.textContent = orig; el.style.color = ''; }, 1200);
+        });
+      });
+    });
+  }
+
+  function showCrawlerPopup(data) {
+    const overlay = document.createElement('div');
+    overlay.className = 'crawler-popup-overlay';
+    let html = `<div class="crawler-popup">
+      <button class="cp-close">&times;</button>
+      <h4>🦜 クローラー詳細</h4>
+      <div class="cp-row"><span class="cp-label">組織名</span><span class="cp-val" style="font-weight:600">${data.name || '—'}</span></div>
+      <div class="cp-row"><span class="cp-label">Crawler ID</span><span class="cp-val"><span class="cp-copyable" data-copy="${data.id || ''}" title="クリックでコピー">${data.id || '—'}</span></span></div>
+      <div class="cp-row"><span class="cp-label">国</span><span class="cp-val">${data.country || '—'}</span></div>`;
+    if (data.prio) {
+      html += `<div class="cp-row"><span class="cp-label">優先度</span><span class="cp-val">${data.prio === '最重要' ? '<span class="prio-badge critical">最重要</span>' : data.prio === '重要' ? '<span class="prio-badge important">重要</span>' : data.prio}</span></div>`;
+    }
+    html += `<div class="cp-row"><span class="cp-label">停止日数</span><span class="cp-val" style="font-family:var(--mono);font-weight:700;color:${parseInt(data.stop) > 0 ? 'var(--red)' : '#16A34A'}">${data.stop}日</span></div>
+      <div class="cp-row"><span class="cp-label">最終取得日</span><span class="cp-val">${data.last ? `<span class="cp-copyable" data-copy="${data.last}" title="クリックでコピー">${data.last}</span>` : '—'}</span></div>`;
+    if (data.url) {
+      html += `<div class="cp-row"><span class="cp-label">int-slate URL</span><span class="cp-val"><a href="${data.url}" target="_blank" rel="noopener" class="cp-link">${data.url}</a></span></div>`;
+    }
+    if (data.target) {
+      html += `<div class="cp-row"><span class="cp-label">Target URL</span><span class="cp-val"><a href="${data.target}" target="_blank" rel="noopener" class="cp-link">${data.target}</a></span></div>`;
+    }
+    html += `</div>`;
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+    bindCopy(overlay);
+    overlay.querySelector('.cp-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+  }
+
+  function getActionList() {
+    const prioOrder = { '最重要': 0, '重要': 1 };
+    const nameCol = headers.find(h => h.toLowerCase().includes('organization') && h.toLowerCase().includes('original')) || '';
+    const jpCol = headers.find(h => h === '日本語名称') || '';
+    const abbrCol = headers.find(h => h.toLowerCase().includes('abbreviation')) || '';
+    const urlCol = headers.find(h => h.toLowerCase().includes('detail page url')) || '';
+    const targetCol = headers.find(h => h.toLowerCase().includes('target url')) || '';
+    const crawlerIdCol = headers.find(h => h.toLowerCase().includes('crawler id')) || '';
+    const lastCrawledCol = headers.find(h => h.toLowerCase().includes('last crawled') || h.toLowerCase().includes('last_crawled')) || '';
+
+    const items = [];
+    rawRows.forEach(r => {
+      const country = (r[colMap.country] || '').trim();
+      if (!country) return;
+      const stop = parseInt(r[colMap.stopDays]);
+      if (isNaN(stop) || stop <= 0) return;
+      const prio = colMap.priority ? (r[colMap.priority] || '').trim() : '';
+      if (prio !== '最重要' && prio !== '重要') return;
+      // apply active filters
+      if (colMap.orgType) {
+        const ot = (r[colMap.orgType] || '').trim();
+        if (ot && !activeOrgTypes.has(ot)) return;
+      }
+      if (colMap.status) {
+        const st = (r[colMap.status] || '').trim();
+        if (st && !activeStatusTypes.has(st)) return;
+      }
+      if (colMap.octoAccount) {
+        const raw = (r[colMap.octoAccount] || '').trim();
+        const accts = raw ? raw.split(';').map(a => a.trim()).filter(Boolean) : [];
+        if (accts.length > 0 && !accts.some(a => activeOctoAccounts.has(a))) return;
+        if (accts.length === 0 && !activeOctoAccounts.has('(empty)')) return;
+      }
+      if (colMap.priority) {
+        const prKey = prio || '(empty)';
+        if (!activePriorityTypes.has(prKey)) return;
+      }
+      const orgName = r[nameCol] || '';
+      const abbr = r[abbrCol] || '';
+      const jp = r[jpCol] || '';
+      const detailUrl = r[urlCol] || '';
+      const targetUrl = r[targetCol] || '';
+      const crawlerId = crawlerIdCol ? (r[crawlerIdCol] || '').trim() : '';
+      // search filter for action list
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const fields = [country, orgName, abbr, jp, crawlerId, detailUrl, targetUrl];
+        if (!fields.some(f => f.toLowerCase().includes(q))) return;
+      }
+      const displayName = orgLang === 'ja' && jp ? jp : (orgName || abbr);
+      const status = colMap.status ? (r[colMap.status] || '').trim() : '';
+      const octo = colMap.octoAccount ? (r[colMap.octoAccount] || '').trim() : '';
+      let lastCrawled = lastCrawledCol ? (r[lastCrawledCol] || '').trim() : '';
+      // normalize to yyyy-mm-dd
+      if (lastCrawled) {
+        const d = new Date(lastCrawled);
+        if (!isNaN(d.getTime())) lastCrawled = d.toISOString().slice(0, 10);
+      }
+      items.push({ country, stop, prio, displayName, detailUrl, targetUrl, status, octo, crawlerId, lastCrawled, prioRank: prioOrder[prio] ?? 99 });
+    });
+    items.sort((a, b) => {
+      if (a.prioRank !== b.prioRank) return a.prioRank - b.prioRank;
+      return b.stop - a.stop;
+    });
+    return items;
+  }
+
+  function renderActionList() {
+    const toggleDiv = document.getElementById('actionToggle');
+    if (!colMap.priority || !colMap.stopDays) {
+      toggleDiv.innerHTML = '';
+      return;
+    }
+    toggleDiv.innerHTML = `<button id="actionToggleBtn" class="${showActionList ? 'active-btn' : ''}">
+      ⚠ 要対応クローラー一覧 ${showActionList ? '▲' : '▼'}
+    </button><button id="maintToggleBtn" class="maint-toggle-btn${maintPanelVisible ? ' active-btn' : ''}">
+      📋 メンテナンス履歴 ${maintPanelVisible ? '▲' : '▼'}
+    </button>`;
+    document.getElementById('actionToggleBtn').addEventListener('click', () => {
+      showActionList = !showActionList;
+      renderActionList();
+    });
+    document.getElementById('maintToggleBtn').addEventListener('click', () => {
+      toggleMaintenancePanel();
+    });
+
+    const panel = document.getElementById('actionPanel');
+    if (!showActionList) { panel.style.display = 'none'; return; }
+
+    const items = getActionList();
+    panel.style.display = 'block';
+    if (items.length === 0) {
+      panel.innerHTML = '<div class="action-panel"><h3>⚠ 要対応クローラー</h3><p style="color:var(--text-muted);padding:16px 0">該当するクローラーはありません</p></div>';
+      return;
+    }
+
+    let html = `<div class="action-panel">
+      <h3>⚠ 要対応クローラー</h3>
+      <p class="action-desc">優先度（最重要・重要）× 停止日数でソート — 上位ほど緊急度が高い</p>
+      <table class="action-table">
+        <thead><tr>
+          <th>#</th>
+          <th>優先度</th>
+          <th>組織名</th>
+          <th>停止日数</th>
+          <th>最終取得日</th>
+          <th>Account</th>
+        </tr></thead>
+        <tbody>`;
+    items.forEach((it, i) => {
+      const prioBadge = it.prio === '最重要'
+        ? '<span class="prio-badge critical">最重要</span>'
+        : '<span class="prio-badge important">重要</span>';
+      const safeName = (it.displayName || '').replace(/"/g, '&quot;');
+      const safeId = (it.crawlerId || '').replace(/"/g, '&quot;');
+      const safeUrl = (it.detailUrl || '').replace(/"/g, '&quot;');
+      const safeTarget = (it.targetUrl || '').replace(/"/g, '&quot;');
+      const safeLastCrawled = (it.lastCrawled || '').replace(/"/g, '&quot;');
+      const safePrio = (it.prio || '').replace(/"/g, '&quot;');
+      html += `<tr>
+        <td class="rank-cell">${i + 1}</td>
+        <td>${prioBadge}</td>
+        <td style="font-weight:600;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <span class="action-crawler-detail" data-name="${safeName}" data-id="${safeId}" data-url="${safeUrl}" data-target="${safeTarget}" data-last="${safeLastCrawled}" data-prio="${safePrio}" data-country="${it.country.replace(/"/g,'&quot;')}" data-stop="${it.stop}" title="クローラー詳細を表示" style="cursor:pointer;border-bottom:2px solid var(--blue);padding-bottom:1px;color:var(--blue)">${it.displayName || '—'}</span>
+        </td>
+        <td style="font-family:var(--mono);font-weight:700;color:var(--red)">${it.stop}日</td>
+        <td>${it.lastCrawled ? `<span class="action-copy" data-copy="${it.lastCrawled}" title="クリックでコピー" style="cursor:pointer;border-bottom:2px dashed var(--border);padding-bottom:1px;font-family:var(--mono);font-size:12px">${it.lastCrawled}</span>` : '—'}</td>
+        <td style="font-size:12px">${it.octo || '—'}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    panel.innerHTML = html;
+
+    bindCopy(panel);
+
+    // Crawler detail popup from action list
+    panel.querySelectorAll('.action-crawler-detail').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showCrawlerPopup(el.dataset);
+      });
+    });
+
+  }
+
+  const TILE_COORDS = {
+    // North America
+    "Canada":[3,2],"USA":[3,3],"Mexico":[3,5],
+    // Central America & Caribbean
+    "Guatemala":[4,6],"Belize":[5,5],"El Salvador":[4,7],"Honduras":[5,6],
+    "Nicaragua":[6,7],"Costa Rica":[5,7],"Panama":[5,8],
+    "Cuba":[6,4],"Jamaica":[7,4],"Haiti":[7,3],"Dominican Republic":[8,4],
+    "Bahamas":[6,3],"Trinidad and Tobago":[9,6],"Barbados":[9,5],"Saint Lucia":[10,6],
+    "Saint Vincent and the Grenadines":[10,5],
+    // South America
+    "Colombia":[6,9],"Ecuador":[5,10],"Peru":[6,11],"Venezuela":[7,8],"Guyana":[8,8],
+    "Brazil":[8,11],"Bolivia":[7,12],"Paraguay":[7,13],"Chile":[6,14],"Argentina":[7,15],
+    "Suriname":[8,9],"Uruguay":[8,14],
+    // Europe - North
+    "Iceland":[12,1],"Norway":[14,2],"Sweden":[15,2],"Finland":[16,2],"Denmark":[15,3],
+    // Europe - West
+    "UK":[13,4],"Ireland":[12,4],"Netherlands":[14,4],"Belgium":[14,5],"Luxembourg":[13,5],
+    "France":[13,6],"Spain":[12,8],"Portugal":[12,7],
+    // Europe - Central
+    "Germany":[15,5],"Switzerland":[14,6],"Austria":[16,6],"Czech Republic":[16,5],
+    "Poland":[17,4],"Slovakia":[17,5],"Hungary":[17,6],"Slovenia":[15,7],
+    // Europe - South & Balkans
+    "Italy":[15,8],"Croatia":[16,7],"Serbia":[17,7],"Montenegro":[16,8],
+    "North Macedonia":[17,8],"Greece":[17,9],"Albania":[16,9],
+    "Romania":[18,6],"Bulgaria":[18,7],"Moldova":[19,5],"Republic of Kosovo":[18,8],
+    // Europe - Baltic & East
+    "Estonia":[17,2],"Latvia":[17,3],"Lithuania":[18,3],
+    "Ukraine":[19,4],"Belarus":[19,3],"Russia":[20,3],
+    "EU":[13,3],"Cyprus":[18,10],
+    // North Africa
+    "Morocco":[13,10],"Algeria":[14,11],"Tunisia":[15,10],"Libya":[16,11],
+    "Egypt":[17,11],"Western Sahara":[12,11],
+    // West Africa
+    "Mauritania":[12,12],"Senegal":[12,13],"Gambia":[11,13],"Guinea-Bissau":[11,14],
+    "Guinea":[12,14],"Sierra Leone":[11,15],"Liberia":[12,15],
+    "Mali":[13,12],"Niger":[14,12],"Burkina Faso":[14,13],"Togo":[15,14],
+    "Côte d'Ivoire":[13,15],"Ghana":[14,14],"Benin":[16,14],"Nigeria":[15,13],
+    "Cape Verde":[10,14],
+    // Central & East Africa
+    "Chad":[15,12],"Sudan":[16,12],"Eritrea":[17,12],
+    "Central African Republic":[16,13],"Cameroon":[15,15],
+    "Equatorial Guinea":[13,16],"Gabon":[14,16],
+    "Congo-Brazzaville":[15,16],"Congo-Kinshasa":[16,15],
+    "South Sudan":[17,15],"Ethiopia":[18,14],"Somalia":[19,14],
+    "Djibouti":[18,13],"Kenya":[18,15],"Uganda":[17,16],
+    "Rwanda":[16,16],"Burundi":[16,17],"Tanzania":[17,17],
+    // Southern Africa
+    "Angola":[14,17],"Zambia":[15,18],"Malawi":[17,18],"Comoros":[19,18],
+    "Mozambique":[17,19],"Botswana":[16,18],"Zimbabwe":[16,19],"Namibia":[15,19],
+    "South Africa":[16,20],"Eswatini":[17,20],"Lesotho":[17,21],
+    "Madagascar":[18,20],"Seychelles":[20,17],"Mauritius":[19,19],
+    // Other Africa labels
+    "Africa":[14,19],"Other(Africa)":[13,19],
+    // Middle East
+    "Turkey":[19,8],"Lebanon":[19,7],"Syria":[20,8],"Iraq":[21,8],"Iran":[22,8],
+    "Saudi Arabia":[20,10],"Yemen":[20,11],"Oman":[22,10],
+    "UAE":[21,10],"United Arab Emirates":[21,10],
+    "Kuwait":[20,9],"Qatar":[21,11],"Bahrain":[21,9],"Jordan":[19,9],
+    "Israel":[18,9],"State of Palestine":[19,10],
+    // Caucasus & Central Asia
+    "Georgia":[20,6],"Azerbaijan":[22,7],
+    "Kazakhstan":[23,5],"Uzbekistan":[23,6],"Turkmenistan":[22,6],"Kyrgyzstan":[24,5],
+    "Tajikistan":[24,6],"Afghanistan":[23,7],
+    // South Asia
+    "India":[23,9],"Pakistan":[22,9],"Nepal":[24,8],
+    "Bangladesh":[24,9],"Sri Lanka":[23,11],"Maldives":[22,12],"Bhutan":[25,7],
+    // Southeast Asia
+    "Myanmar":[25,9],"Thailand":[26,9],"Laos":[26,8],"Vietnam":[27,9],"Cambodia":[26,10],
+    "Malaysia":[26,11],"Singapore":[26,12],"Indonesia":[27,13],"Philippines":[28,10],
+    "Brunei Darussalam":[27,12],"East Timor":[28,14],
+    // East Asia
+    "Mongolia":[25,4],"China":[25,6],"Japan":[28,5],"Korea":[27,5],"North Korea":[27,4],
+    "Taiwan":[27,7],"Hong Kong":[26,7],
+    // Oceania
+    "Australia":[25,19],"New Zealand":[27,20],"Fiji":[29,18],"Solomon Islands":[29,17],
+    "Papua New Guinea":[28,16],"Samoa":[30,18],"American Samoa":[30,19],
+    "Tonga":[30,20],"Kiribati":[30,16],"Tuvalu":[30,17],
+    "Marshall Islands":[30,15],"Micronesia":[29,15],"Palau":[28,13],
+    // Oceania label
+    "Oceania":[26,18],
+    // Other / Multi
+    "Multinational":[2,1],"Other(ASEAN)":[27,14],"Other(ASEM)":[24,2],
+    "Other(Asia)":[25,3],"Other(Europe)":[12,2],
+  };
+
+  // Regional boundaries for cartogram overlay
+  const REGION_BOUNDS = {
+    "北米": { color: "#3B82F6", countries: ["Canada","USA","Mexico"] },
+    "中米・カリブ": { color: "#8B5CF6", countries: ["Guatemala","Belize","El Salvador","Honduras","Nicaragua","Costa Rica","Panama","Cuba","Jamaica","Haiti","Dominican Republic","Bahamas","Trinidad and Tobago","Barbados","Saint Lucia","Saint Vincent and the Grenadines"] },
+    "南米": { color: "#6366F1", countries: ["Colombia","Ecuador","Peru","Venezuela","Guyana","Brazil","Bolivia","Paraguay","Chile","Argentina","Suriname","Uruguay"] },
+    "ヨーロッパ": { color: "#2563EB", countries: ["Iceland","Norway","Sweden","Finland","Denmark","UK","Ireland","Netherlands","Belgium","Luxembourg","France","Spain","Portugal","Germany","Switzerland","Austria","Czech Republic","Poland","Slovakia","Hungary","Slovenia","Italy","Croatia","Serbia","Montenegro","North Macedonia","Greece","Albania","Romania","Bulgaria","Moldova","Estonia","Latvia","Lithuania","Ukraine","Belarus","Russia","EU","Cyprus","Republic of Kosovo"] },
+    "中東": { color: "#D97706", countries: ["Turkey","Lebanon","Syria","Iraq","Iran","Saudi Arabia","Yemen","Oman","UAE","United Arab Emirates","Kuwait","Qatar","Bahrain","Jordan","Israel","State of Palestine"] },
+    "アフリカ": { color: "#DC2626", countries: ["Morocco","Algeria","Tunisia","Libya","Egypt","Western Sahara","Mauritania","Senegal","Gambia","Guinea-Bissau","Guinea","Sierra Leone","Liberia","Mali","Niger","Burkina Faso","Togo","Côte d'Ivoire","Ghana","Benin","Nigeria","Cape Verde","Chad","Sudan","Eritrea","Central African Republic","Cameroon","Equatorial Guinea","Gabon","Congo-Brazzaville","Congo-Kinshasa","South Sudan","Ethiopia","Somalia","Djibouti","Kenya","Uganda","Rwanda","Burundi","Tanzania","Angola","Zambia","Malawi","Comoros","Mozambique","Botswana","Zimbabwe","Namibia","South Africa","Eswatini","Lesotho","Madagascar","Seychelles","Mauritius","Africa","Other(Africa)"] },
+    "中央アジア・コーカサス": { color: "#9333EA", countries: ["Georgia","Azerbaijan","Kazakhstan","Uzbekistan","Turkmenistan","Kyrgyzstan","Tajikistan","Afghanistan"] },
+    "南アジア": { color: "#059669", countries: ["India","Pakistan","Nepal","Bangladesh","Sri Lanka","Maldives","Bhutan"] },
+    "東南アジア": { color: "#0891B2", countries: ["Myanmar","Thailand","Laos","Vietnam","Cambodia","Malaysia","Singapore","Indonesia","Philippines","Brunei Darussalam","East Timor","Other(ASEAN)"] },
+    "東アジア": { color: "#E11D48", countries: ["Mongolia","China","Japan","Korea","North Korea","Taiwan","Hong Kong"] },
+    "オセアニア": { color: "#7C3AED", countries: ["Australia","New Zealand","Fiji","Solomon Islands","Papua New Guinea","Samoa","American Samoa","Tonga","Kiribati","Tuvalu","Marshall Islands","Micronesia","Palau","Oceania"] },
+  };
+
+  // Header columns for search
+  const _searchNameCol = headers.find(h => h.toLowerCase().includes('organization') && h.toLowerCase().includes('original')) || '';
+  const _searchAbbrCol = headers.find(h => h.toLowerCase().includes('abbreviation')) || '';
+  const _searchJpCol = headers.find(h => h === '日本語名称') || '';
+  const _searchIdCol = headers.find(h => h.toLowerCase().includes('crawler id')) || '';
+  const _searchUrlCol = headers.find(h => h.toLowerCase().includes('detail page url')) || '';
+  const _searchTargetCol = headers.find(h => h.toLowerCase().includes('target url')) || '';
+
+  function compute() {
+    const countryMap = {};
+    const q = searchQuery ? searchQuery.toLowerCase() : '';
+    rawRows.forEach(r => {
+      const country = (r[colMap.country] || '').trim();
+      if (!country) return;
+      if (colMap.orgType) {
+        const ot = (r[colMap.orgType] || '').trim();
+        if (ot && !activeOrgTypes.has(ot)) return;
+      }
+      if (colMap.status) {
+        const st = (r[colMap.status] || '').trim();
+        if (st && !activeStatusTypes.has(st)) return;
+      }
+      if (colMap.octoAccount) {
+        const raw = (r[colMap.octoAccount] || '').trim();
+        const accts = raw ? raw.split(';').map(a => a.trim()).filter(Boolean) : [];
+        if (accts.length > 0 && !accts.some(a => activeOctoAccounts.has(a))) return;
+        if (accts.length === 0 && !activeOctoAccounts.has('(empty)')) return;
+      }
+      if (colMap.priority) {
+        const pr = (r[colMap.priority] || '').trim();
+        const prKey = pr || '(empty)';
+        if (!activePriorityTypes.has(prKey)) return;
+      }
+      const stop = parseInt(r[colMap.stopDays]);
+      if (isNaN(stop)) return;
+      // Search filter: match country, org name, abbreviation, JP name, crawler ID, or URLs
+      if (q) {
+        const fields = [
+          country,
+          r[_searchNameCol] || '',
+          r[_searchAbbrCol] || '',
+          r[_searchJpCol] || '',
+          r[_searchIdCol] || '',
+          r[_searchUrlCol] || '',
+          r[_searchTargetCol] || ''
+        ];
+        if (!fields.some(f => f.toLowerCase().includes(q))) return;
+      }
+      if (!countryMap[country]) countryMap[country] = { active: 0, stopped: 0, total: 0 };
+      if (stop > 0) countryMap[country].stopped++;
+      else countryMap[country].active++;
+      countryMap[country].total++;
+    });
+    let entries = Object.entries(countryMap).map(([name, d]) => ({
+      name, ...d, pct: d.total ? Math.round(d.stopped / d.total * 100) : 0
+    }));
+    if (sortBy === 'total') entries.sort((a, b) => b.total - a.total);
+    else if (sortBy === 'pct') entries.sort((a, b) => b.pct - a.pct || b.stopped - a.stopped);
+    else entries.sort((a, b) => a.name.localeCompare(b.name));
+    return entries;
+  }
+
+  function renderSearchResults() {
+    const panel = document.getElementById('searchResultsPanel');
+    if (!searchQuery || searchQuery.trim().length === 0) {
+      panel.style.display = 'none';
+      return;
+    }
+    const q = searchQuery.toLowerCase();
+    const nameCol = _searchNameCol;
+    const abbrCol = _searchAbbrCol;
+    const jpCol = _searchJpCol;
+    const crawlerIdCol = _searchIdCol;
+    const urlCol = _searchUrlCol;
+    const targetCol = _searchTargetCol;
+    const lastCrawledColH = headers.find(h => h.toLowerCase().includes('last crawled') || h.toLowerCase().includes('last_crawled')) || '';
+
+    const results = [];
+    rawRows.forEach(r => {
+      const country = (r[colMap.country] || '').trim();
+      if (!country) return;
+      if (colMap.orgType) {
+        const ot = (r[colMap.orgType] || '').trim();
+        if (ot && !activeOrgTypes.has(ot)) return;
+      }
+      if (colMap.status) {
+        const st = (r[colMap.status] || '').trim();
+        if (st && !activeStatusTypes.has(st)) return;
+      }
+      if (colMap.octoAccount) {
+        const raw = (r[colMap.octoAccount] || '').trim();
+        const accts = raw ? raw.split(';').map(a => a.trim()).filter(Boolean) : [];
+        if (accts.length > 0 && !accts.some(a => activeOctoAccounts.has(a))) return;
+        if (accts.length === 0 && !activeOctoAccounts.has('(empty)')) return;
+      }
+      if (colMap.priority) {
+        const pr = (r[colMap.priority] || '').trim();
+        const prKey = pr || '(empty)';
+        if (!activePriorityTypes.has(prKey)) return;
+      }
+      const stop = parseInt(r[colMap.stopDays]);
+      if (isNaN(stop)) return;
+      const orgName = r[nameCol] || '';
+      const abbr = r[abbrCol] || '';
+      const jp = r[jpCol] || '';
+      const id = crawlerIdCol ? (r[crawlerIdCol] || '').trim() : '';
+      const url = r[urlCol] || '';
+      const target = r[targetCol] || '';
+      const fields = [country, orgName, abbr, jp, id, url, target];
+      if (!fields.some(f => f.toLowerCase().includes(q))) return;
+      const displayName = orgLang === 'ja' && jp ? jp : (orgName || abbr);
+      let lastCrawled = lastCrawledColH ? (r[lastCrawledColH] || '').trim() : '';
+      if (lastCrawled) {
+        const d = new Date(lastCrawled);
+        if (!isNaN(d.getTime())) lastCrawled = d.toISOString().slice(0, 10);
+      }
+      const prio = colMap.priority ? (r[colMap.priority] || '').trim() : '';
+      const status = colMap.status ? (r[colMap.status] || '').trim() : '';
+      results.push({ country, displayName, orgName, id, stop, lastCrawled, prio, status, url, target });
+    });
+
+    if (results.length === 0) {
+      panel.style.display = 'none';
+      return;
+    }
+
+    results.sort((a, b) => b.stop - a.stop);
+
+    let html = `<div class="search-results-panel">`;
+    html += `<h3>🔍 検索結果 <span class="sr-count">${results.length} 件のクローラー</span></h3>`;
+    html += `<table><thead><tr>
+      <th>#</th>
+      <th>組織名</th>
+      <th>国</th>
+      <th>ステータス</th>
+      <th>停止日数</th>
+      <th>最終取得日</th>
+      <th>Crawler ID</th>
+    </tr></thead><tbody>`;
+    results.forEach((it, i) => {
+      const isActive = it.stop <= 0;
+      const statusLabel = isActive ? '稼働中' : '停止中';
+      const statusCls = isActive ? 'active' : 'stopped';
+      html += `<tr>
+        <td>${i + 1}</td>
+        <td><span class="sr-org" data-name="${(it.orgName || it.displayName).replace(/"/g,'&quot;')}" data-id="${it.id}" data-country="${it.country}" data-stop="${it.stop}" data-last="${it.lastCrawled}" data-url="${it.url}" data-target="${it.target}" data-prio="${it.prio}">${it.displayName}</span></td>
+        <td>${it.country}</td>
+        <td><span class="sr-status ${statusCls}">${statusLabel}</span></td>
+        <td>${it.stop > 0 ? it.stop + '日' : '—'}</td>
+        <td>${it.lastCrawled || '—'}</td>
+        <td style="font-family:var(--mono);font-size:12px">${it.id || '—'}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+
+    panel.querySelectorAll('.sr-org').forEach(el => {
+      el.addEventListener('click', () => {
+        showCrawlerPopup(el.dataset);
+      });
+    });
+  }
+
+  function render() {
+    // preserve search focus across DOM rebuild
+    const prevFocused = document.activeElement && document.activeElement.id === 'searchInput';
+    const entries = compute();
+    const totalActive = entries.reduce((s, e) => s + e.active, 0);
+    const totalStopped = entries.reduce((s, e) => s + e.stopped, 0);
+    const totalAll = totalActive + totalStopped;
+    const overallPct = totalAll ? Math.round(totalActive / totalAll * 100) : 0;
+
+    document.getElementById('statsBar').innerHTML = `
+      <div class="stat-card"><div class="label">Countries</div><div class="value">${entries.length}</div></div>
+      <div class="stat-card"><div class="label">Crawlers</div><div class="value">${totalAll.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="label">Active</div><div class="value green">${totalActive.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="label">Stopped</div><div class="value red">${totalStopped.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="label">Active rate</div><div class="value ${overallPct >= 70 ? 'green' : overallPct >= 50 ? 'amber' : 'red'}">${overallPct}%</div></div>
+    `;
+
+    let ctrlHTML = `
+      <span class="group-label">View:</span>
+      <div class="pill-group">
+        <button class="pill view-toggle ${viewMode==='tiles'?'active':''}" data-view="tiles">Tiles</button>
+        <button class="pill view-toggle ${viewMode==='cartogram'?'active':''}" data-view="cartogram">Map</button>
+      </div>
+      <div class="separator"></div>
+      <span class="group-label">Sort:</span>
+      <div class="pill-group">
+        <button class="pill ${sortBy==='total'?'active':''}" data-sort="total" ${viewMode==='cartogram'?'disabled style="opacity:.3;pointer-events:none"':''}>Total</button>
+        <button class="pill ${sortBy==='pct'?'active':''}" data-sort="pct" ${viewMode==='cartogram'?'disabled style="opacity:.3;pointer-events:none"':''}>Stopped %</button>
+        <button class="pill ${sortBy==='alpha'?'active':''}" data-sort="alpha" ${viewMode==='cartogram'?'disabled style="opacity:.3;pointer-events:none"':''}>A → Z</button>
+      </div>
+    `;
+    if (orgTypes.size > 0) {
+      ctrlHTML += `
+        <div class="separator"></div>
+        <span class="group-label">Org type:</span>
+        <div class="pill-group org-filter-section">
+          <button class="pill org-all ${activeOrgTypes.size === orgTypes.size ? 'active' : ''}">All</button>
+          ${[...orgTypes].sort().map(t =>
+            `<button class="pill org-toggle ${activeOrgTypes.has(t)?'active':''}" data-org="${t}">${t}</button>`
+          ).join('')}
+        </div>
+      `;
+    }
+    if (statusTypes.size > 0) {
+      ctrlHTML += `
+        <div class="separator"></div>
+        <span class="group-label">Status:</span>
+        <div class="pill-group">
+          <button class="pill status-all ${activeStatusTypes.size === statusTypes.size ? 'active' : ''}">All</button>
+          ${[...statusTypes].sort().map(t =>
+            `<button class="pill status-toggle ${activeStatusTypes.has(t)?'active':''}" data-status="${t}">${t}</button>`
+          ).join('')}
+        </div>
+      `;
+    }
+    if (octoAccounts.size > 0) {
+      ctrlHTML += `
+        <div class="separator"></div>
+        <span class="group-label">Account:</span>
+        <div class="pill-group">
+          <button class="pill octo-all ${activeOctoAccounts.size === octoAccounts.size ? 'active' : ''}">All</button>
+          ${[...octoAccounts].sort().map(t =>
+            `<button class="pill octo-toggle ${activeOctoAccounts.has(t)?'active':''}" data-octo="${t}">${t}</button>`
+          ).join('')}
+        </div>
+      `;
+    }
+    if (priorityTypes.size > 0) {
+      ctrlHTML += `
+        <div class="separator"></div>
+        <span class="group-label">優先度:</span>
+        <div class="pill-group">
+          <button class="pill prio-all ${activePriorityTypes.size === priorityTypes.size ? 'active' : ''}">All</button>
+          ${[...priorityTypes].sort().map(t =>
+            `<button class="pill prio-toggle ${activePriorityTypes.has(t)?'active':''}" data-prio="${t}">${t}</button>`
+          ).join('')}
+        </div>
+      `;
+    }
+    ctrlHTML += `
+      <div class="separator"></div>
+      <span class="group-label">Org名:</span>
+      <div class="pill-group">
+        <button class="pill lang-toggle ${orgLang==='en'?'active':''}" data-lang="en">EN</button>
+        <button class="pill lang-toggle ${orgLang==='ja'?'active':''}" data-lang="ja">日本語</button>
+      </div>
+    `;
+    ctrlHTML += `
+      <div class="search-box">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="国名 / クローラー名 / ID / URL で検索..." value="${searchQuery}">
+      </div>
+    `;
+    document.getElementById('controls').innerHTML = ctrlHTML;
+
+    document.querySelectorAll('.view-toggle').forEach(btn => {
+      btn.addEventListener('click', () => { viewMode = btn.dataset.view; render(); });
+    });
+    document.querySelectorAll('[data-sort]').forEach(btn => {
+      btn.addEventListener('click', () => { sortBy = btn.dataset.sort; render(); });
+    });
+    document.querySelectorAll('.org-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset.org;
+        if (activeOrgTypes.has(t)) activeOrgTypes.delete(t);
+        else activeOrgTypes.add(t);
+        render();
+      });
+    });
+    const allBtn = document.querySelector('.org-all');
+    if (allBtn) {
+      allBtn.addEventListener('click', () => {
+        if (activeOrgTypes.size === orgTypes.size) activeOrgTypes = new Set();
+        else activeOrgTypes = new Set(orgTypes);
+        render();
+      });
+    }
+    document.querySelectorAll('.status-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset.status;
+        if (activeStatusTypes.has(t)) activeStatusTypes.delete(t);
+        else activeStatusTypes.add(t);
+        render();
+      });
+    });
+    const statusAllBtn = document.querySelector('.status-all');
+    if (statusAllBtn) {
+      statusAllBtn.addEventListener('click', () => {
+        if (activeStatusTypes.size === statusTypes.size) activeStatusTypes = new Set();
+        else activeStatusTypes = new Set(statusTypes);
+        render();
+      });
+    }
+    document.querySelectorAll('.octo-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset.octo;
+        if (activeOctoAccounts.has(t)) activeOctoAccounts.delete(t);
+        else activeOctoAccounts.add(t);
+        render();
+      });
+    });
+    const octoAllBtn = document.querySelector('.octo-all');
+    if (octoAllBtn) {
+      octoAllBtn.addEventListener('click', () => {
+        if (activeOctoAccounts.size === octoAccounts.size) activeOctoAccounts = new Set();
+        else activeOctoAccounts = new Set(octoAccounts);
+        render();
+      });
+    }
+    document.querySelectorAll('.prio-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset.prio;
+        if (activePriorityTypes.has(t)) activePriorityTypes.delete(t);
+        else activePriorityTypes.add(t);
+        render();
+      });
+    });
+    const prioAllBtn = document.querySelector('.prio-all');
+    if (prioAllBtn) {
+      prioAllBtn.addEventListener('click', () => {
+        if (activePriorityTypes.size === priorityTypes.size) activePriorityTypes = new Set();
+        else activePriorityTypes = new Set(priorityTypes);
+        render();
+      });
+    }
+    document.querySelectorAll('.lang-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        orgLang = btn.dataset.lang;
+        render();
+      });
+    });
+    const searchInput = document.getElementById('searchInput');
+    searchInput.addEventListener('input', e => { searchQuery = e.target.value; render(); });
+    if (prevFocused) {
+      searchInput.focus();
+      searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+    }
+
+    const grid = document.getElementById('grid');
+    if (viewMode === 'cartogram') {
+      grid.classList.add('cartogram-mode');
+    } else {
+      grid.classList.remove('cartogram-mode');
+    }
+    if (entries.length === 0) {
+      grid.innerHTML = '<div class="empty-state"><h3>No data to display</h3><p>フィルターを変更してください</p></div>';
+      return;
+    }
+
+    if (viewMode === 'cartogram') {
+      const mapped = [];
+      const unmapped = [];
+      entries.forEach(d => {
+        const coord = TILE_COORDS[d.name];
+        if (coord) mapped.push({...d, col: coord[0], row: coord[1]});
+        else unmapped.push(d);
+      });
+      let html = mapped.map(d => {
+        const c = getColorForPct(d.pct);
+        const activePct = 100 - d.pct;
+        return `<div class="cell" style="background:${c.bg};color:${c.text};cursor:pointer;--gc:${d.col};--gr:${d.row}" data-country="${d.name.replace(/"/g,'&quot;')}">
+          <span class="name">${d.name}</span>
+          <span class="num">${d.active}/${d.total}</span>
+          <div class="tooltip">
+            <div class="tt-name">${d.name}</div>
+            <div class="tt-row"><span class="tt-label">Active</span><span class="tt-val g">${d.active} (${activePct}%)</span></div>
+            <div class="tt-row"><span class="tt-label">Stopped</span><span class="tt-val r">${d.stopped} (${d.pct}%)</span></div>
+            <div class="tt-row"><span class="tt-label">Total</span><span class="tt-val">${d.total}</span></div>
+          </div>
+        </div>`;
+      }).join('');
+      if (unmapped.length) {
+        html += unmapped.map(d => {
+          const c = getColorForPct(d.pct);
+          const activePct = 100 - d.pct;
+          return `<div class="cell" style="background:${c.bg};color:${c.text};cursor:pointer;--gc:auto;--gr:21" data-country="${d.name.replace(/"/g,'&quot;')}">
+            <span class="name">${d.name}</span>
+            <span class="num">${d.active}/${d.total}</span>
+            <div class="tooltip">
+              <div class="tt-name">${d.name}</div>
+              <div class="tt-row"><span class="tt-label">Active</span><span class="tt-val g">${d.active} (${activePct}%)</span></div>
+              <div class="tt-row"><span class="tt-label">Stopped</span><span class="tt-val r">${d.stopped} (${d.pct}%)</span></div>
+              <div class="tt-row"><span class="tt-label">Total</span><span class="tt-val">${d.total}</span></div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+      // Add grey tiles for countries in TILE_COORDS but not in data
+      const dataCountries = new Set(entries.map(e => e.name));
+      Object.entries(TILE_COORDS).forEach(([name, coord]) => {
+        if (dataCountries.has(name)) return;
+        // Skip label-only entries
+        if (['Oceania','Africa','Other(Africa)','Other(Asia)','Other(Europe)','Other(ASEAN)','Other(ASEM)','Multinational'].includes(name)) return;
+        html += `<div class="cell cell-empty" style="--gc:${coord[0]};--gr:${coord[1]}" data-country="${name.replace(/"/g,'&quot;')}">
+          <span class="name">${name}</span>
+          <span class="num">—</span>
+          <div class="tooltip">
+            <div class="tt-name">${name}</div>
+            <div class="tt-row"><span class="tt-label">クローラーなし</span></div>
+          </div>
+        </div>`;
+      });
+      grid.innerHTML = html;
+      // Draw region boundary outlines using CSS grid placement (responsive)
+      Object.entries(REGION_BOUNDS).forEach(([label, def]) => {
+        let minCol = Infinity, maxCol = 0, minRow = Infinity, maxRow = 0;
+        let count = 0;
+        def.countries.forEach(c => {
+          const coord = TILE_COORDS[c];
+          if (!coord) return;
+          count++;
+          if (coord[0] < minCol) minCol = coord[0];
+          if (coord[0] > maxCol) maxCol = coord[0];
+          if (coord[1] < minRow) minRow = coord[1];
+          if (coord[1] > maxRow) maxRow = coord[1];
+        });
+        if (!count) return;
+        const outline = document.createElement('div');
+        outline.className = 'region-outline';
+        outline.style.gridColumn = minCol + ' / ' + (maxCol + 1);
+        outline.style.gridRow = minRow + ' / ' + (maxRow + 1);
+        outline.style.borderColor = def.color;
+        outline.innerHTML = '<span class="region-label" style="color:' + def.color + '">' + label + '</span>';
+        grid.appendChild(outline);
+      });
+    } else {
+      grid.innerHTML = entries.map(d => {
+        const c = getColorForPct(d.pct);
+        const activePct = 100 - d.pct;
+        return `<div class="cell" style="background:${c.bg};color:${c.text};cursor:pointer" data-country="${d.name.replace(/"/g,'&quot;')}">
+          <span class="name">${d.name}</span>
+          <span class="num">${d.active}/${d.total}</span>
+          <div class="tooltip">
+            <div class="tt-name">${d.name}</div>
+            <div class="tt-row"><span class="tt-label">Active</span><span class="tt-val g">${d.active} (${activePct}%)</span></div>
+            <div class="tt-row"><span class="tt-label">Stopped</span><span class="tt-val r">${d.stopped} (${d.pct}%)</span></div>
+            <div class="tt-row"><span class="tt-label">Total</span><span class="tt-val">${d.total}</span></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    grid.querySelectorAll('.cell[data-country]').forEach(cell => {
+      cell.addEventListener('click', () => showDetail(cell.dataset.country));
+    });
+
+    renderActionList();
+    renderSearchResults();
+  }
+
+  function getFilteredRows(country) {
+    return rawRows.filter(r => {
+      if ((r[colMap.country] || '').trim() !== country) return false;
+      if (colMap.orgType) {
+        const ot = (r[colMap.orgType] || '').trim();
+        if (ot && !activeOrgTypes.has(ot)) return false;
+      }
+      if (colMap.status) {
+        const st = (r[colMap.status] || '').trim();
+        if (st && !activeStatusTypes.has(st)) return false;
+      }
+      if (colMap.octoAccount) {
+        const raw = (r[colMap.octoAccount] || '').trim();
+        const accts = raw ? raw.split(';').map(a => a.trim()).filter(Boolean) : [];
+        if (accts.length > 0 && !accts.some(a => activeOctoAccounts.has(a))) return false;
+        if (accts.length === 0 && !activeOctoAccounts.has('(empty)')) return false;
+      }
+      if (colMap.priority) {
+        const pr = (r[colMap.priority] || '').trim();
+        const prKey = pr || '(empty)';
+        if (!activePriorityTypes.has(prKey)) return false;
+      }
+      const stop = parseInt(r[colMap.stopDays]);
+      if (isNaN(stop)) return false;
+      return true;
+    });
+  }
+
+  function showDetail(country) {
+    const rows = getFilteredRows(country);
+    if (!rows.length) return;
+
+    const activeCount = rows.filter(r => parseInt(r[colMap.stopDays]) <= 0).length;
+    const stoppedCount = rows.length - activeCount;
+
+    const nameCol = headers.find(h => h.toLowerCase().includes('organization') && h.toLowerCase().includes('original')) || '';
+    const abbrCol = headers.find(h => h.toLowerCase().includes('abbreviation')) || '';
+    const jpCol = headers.find(h => h === '日本語名称') || '';
+    const freqCol = headers.find(h => h.toLowerCase().includes('update') && h.toLowerCase().includes('freq')) || headers.find(h => h === 'Update Frequency(Day)') || '';
+    const urlCol = headers.find(h => h.toLowerCase().includes('detail page url')) || '';
+    const targetCol = headers.find(h => h.toLowerCase().includes('target url')) || '';
+    const orgTypeCol = colMap.orgType;
+    const statusCol = colMap.status;
+    const octoCol = colMap.octoAccount;
+    const prioCol = colMap.priority;
+    const crawlerIdCol2 = headers.find(h => h.toLowerCase().includes('crawler id')) || '';
+    const lastCrawledCol2 = headers.find(h => h.toLowerCase().includes('last crawled') || h.toLowerCase().includes('last_crawled')) || '';
+
+    rows.sort((a, b) => parseInt(b[colMap.stopDays]) - parseInt(a[colMap.stopDays]));
+
+    let tableHTML = '<table class="detail-table"><thead><tr>';
+    tableHTML += '<th>Status</th>';
+    tableHTML += '<th>Organization</th>';
+    if (orgTypeCol) tableHTML += '<th>Type</th>';
+    if (prioCol) tableHTML += '<th>優先度</th>';
+    if (octoCol) tableHTML += '<th>Account</th>';
+    tableHTML += '<th>停止日数</th>';
+    if (freqCol) tableHTML += '<th>更新頻度</th>';
+    if (statusCol) tableHTML += '<th>Publish</th>';
+    tableHTML += '<th>Target</th>';
+    tableHTML += '<th style="text-align:center">記録</th>';
+    tableHTML += '</tr></thead><tbody>';
+
+    rows.forEach(r => {
+      const stop = parseInt(r[colMap.stopDays]);
+      const isStopped = stop > 0;
+      const badge = isStopped
+        ? '<span class="badge badge-stopped">Stopped</span>'
+        : '<span class="badge badge-active">Active</span>';
+
+      const orgName = r[nameCol] || '';
+      const abbr = r[abbrCol] || '';
+      const jp = r[jpCol] || '';
+      const detailUrl = r[urlCol] || '';
+      const targetUrl = r[targetCol] || '';
+
+      let displayName;
+      let titleAttr;
+      if (orgLang === 'ja') {
+        displayName = jp || abbr || orgName || '—';
+        titleAttr = orgName || abbr;
+      } else {
+        displayName = abbr && abbr !== orgName ? abbr + ' — ' + orgName : (orgName || abbr || jp || '—');
+        titleAttr = jp || orgName;
+      }
+      const cid = crawlerIdCol2 ? (r[crawlerIdCol2] || '').trim() : '';
+      let lastCr = lastCrawledCol2 ? (r[lastCrawledCol2] || '').trim() : '';
+      if (lastCr) { const dd = new Date(lastCr); if (!isNaN(dd.getTime())) lastCr = dd.toISOString().slice(0, 10); }
+      const pv2 = prioCol ? (r[prioCol] || '').trim() : '';
+
+      const esc = s => (s || '').replace(/"/g, '&quot;');
+      const nameCell = '<span class="detail-crawler-link" '
+        + 'data-name="' + esc(orgName || displayName) + '" '
+        + 'data-id="' + esc(cid) + '" '
+        + 'data-country="' + esc(country) + '" '
+        + 'data-stop="' + stop + '" '
+        + 'data-last="' + esc(lastCr) + '" '
+        + 'data-url="' + esc(detailUrl) + '" '
+        + 'data-target="' + esc(targetUrl) + '" '
+        + 'data-prio="' + esc(pv2) + '" '
+        + 'title="クローラー詳細を表示" style="cursor:pointer;color:var(--blue);border-bottom:2px solid var(--blue);padding-bottom:1px">'
+        + displayName + '</span>';
+
+      tableHTML += '<tr>';
+      tableHTML += '<td>' + badge + '</td>';
+      tableHTML += '<td class="org-name">' + nameCell + '</td>';
+      if (orgTypeCol) tableHTML += '<td style="white-space:nowrap;color:var(--text-muted);font-size:12px;font-weight:600">' + (r[orgTypeCol] || '') + '</td>';
+      if (prioCol) {
+        const pv = (r[prioCol] || '').trim();
+        const pc = pv === '最重要' ? 'var(--red)' : pv === '重要' ? '#D97706' : 'var(--text-muted)';
+        tableHTML += '<td style="font-size:12px;white-space:nowrap;color:' + pc + ';font-weight:700">' + (pv || '—') + '</td>';
+      }
+      if (octoCol) tableHTML += '<td style="font-family:var(--mono);font-size:11px;color:var(--text-muted);white-space:nowrap;font-weight:500">' + (r[octoCol] || '—') + '</td>';
+      tableHTML += '<td class="stop-days" style="color:' + (isStopped ? 'var(--red)' : '#16A34A') + '">' + stop + '</td>';
+      if (freqCol) tableHTML += '<td style="font-family:var(--mono);font-size:12px;color:var(--text-muted);font-weight:500">' + (r[freqCol] || '') + 'd</td>';
+      if (statusCol) tableHTML += '<td style="font-size:12px;color:var(--text-muted);font-weight:500">' + (r[statusCol] || '') + '</td>';
+      tableHTML += '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+        (targetUrl ? '<a href="' + targetUrl + '" target="_blank" rel="noopener" style="color:var(--blue);font-size:11px;font-weight:500;border-bottom:2px solid var(--blue)">' + targetUrl.replace(/^https?:\/\//, '').slice(0, 40) + '</a>' : '') +
+        '</td>';
+      tableHTML += '<td style="text-align:center"><button class="maint-btn secondary detail-maint-btn" '
+        + 'data-name="' + esc(orgName || displayName) + '" '
+        + 'data-id="' + esc(cid) + '" '
+        + 'data-country="' + esc(country) + '" '
+        + 'data-stop="' + stop + '" '
+        + 'data-last="' + esc(lastCr) + '" '
+        + 'data-url="' + esc(detailUrl) + '" '
+        + 'data-target="' + esc(targetUrl) + '" '
+        + 'data-prio="' + esc(pv2) + '" '
+        + 'style="margin:0;padding:4px 10px;font-size:11px">📝</button></td>';
+      tableHTML += '</tr>';
+    });
+
+    tableHTML += '</tbody></table>';
+
+    const overlay = document.getElementById('detailOverlay');
+    overlay.style.display = 'flex';
+    overlay.innerHTML = `
+      <div class="detail-panel">
+        <div class="detail-header">
+          <div>
+            <h2>${country}</h2>
+            <div class="detail-summary">
+              <span style="color:#16A34A">${activeCount} active</span>
+              <span style="color:var(--red)">${stoppedCount} stopped</span>
+              <span style="color:var(--text-muted)">${rows.length} total</span>
+            </div>
+          </div>
+          <button class="detail-close" id="detailClose">&times;</button>
+        </div>
+        ${tableHTML}
+        <div class="maint-history" id="detailMaintHistory" style="margin-top:20px"></div>
+      </div>
+    `;
+
+    document.getElementById('detailClose').addEventListener('click', closeDetail);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeDetail(); });
+    document.addEventListener('keydown', escHandler);
+
+    // Crawler detail popups from country detail rows
+    overlay.querySelectorAll('.detail-crawler-link').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        showCrawlerPopup(el.dataset);
+      });
+    });
+
+    // Maintenance record buttons per crawler row
+    overlay.querySelectorAll('.detail-maint-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showMaintenanceForm(btn.dataset, () => loadCountryHistory(country, overlay));
+      });
+    });
+
+    // Load maintenance history for all crawlers in this country
+    loadCountryHistory(country, overlay);
+  }
+
+  function escHandler(e) { if (e.key === 'Escape') closeDetail(); }
+
+  function closeDetail() {
+    document.getElementById('detailOverlay').style.display = 'none';
+    document.removeEventListener('keydown', escHandler);
+  }
+
+  // --- Maintenance record system (API-based) ---
+  let dbReady = true; // Always ready when logged in via Next.js auth
+  let userId = null;
+  let userName = null;
+  let maintPanelVisible = false;
+
+  // Fetch current user info from NextAuth session
+  (async () => {
+    try {
+      const res = await fetch('/api/auth/session');
+      const session = await res.json();
+      if (session && session.user) {
+        userId = session.user.id || session.user.email;
+        userName = session.user.name || '';
+        // Add user nav to header
+        const header = document.querySelector('header');
+        if (header) {
+          const nav = document.createElement('div');
+          nav.style.cssText = 'display:flex;align-items:center;gap:10px;margin-top:10px';
+          nav.innerHTML = '<span style="font-size:13px;font-weight:600">👤 ' + (userName||'').replace(/</g,'&lt;') + '</span>'
+            + '<button onclick="fetch(\'/api/auth/signout\',{method:\'POST\'}).then(()=>location.href=\'/login\')" '
+            + 'style="padding:4px 12px;background:#fee2e2;border:2px solid #1a1a1a;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">ログアウト</button>';
+          header.appendChild(nav);
+        }
+      }
+    } catch(e) { console.log('Session check error:', e); }
+  })();
+
+  // API helpers
+  async function apiGet(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    return res.json();
+  }
+  async function apiPost(url, data) {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    return res.json();
+  }
+  async function apiPut(url, data) {
+    const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    return res.json();
+  }
+  async function apiDelete(url) {
+    const res = await fetch(url, { method: 'DELETE' });
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    return res.json();
+  }
+
+  function showMaintenanceForm(crawlerData, onSaved) {
+    const existing = document.querySelector('.maint-form-overlay');
+    if (existing) existing.remove();
+
+    const today = new Date().toISOString().slice(0, 10);
+    const overlay = document.createElement('div');
+    overlay.className = 'maint-form-overlay';
+    overlay.innerHTML = `<div class="maint-form">
+      <button class="cp-close" style="position:absolute;top:10px;right:14px">&times;</button>
+      <h4>📝 メンテナンス記録</h4>
+      <div class="maint-form-info">
+        <strong>${(crawlerData.name || crawlerData.id || '—').replace(/</g,'&lt;')}</strong>
+        ${crawlerData.country ? ' / ' + crawlerData.country : ''}
+      </div>
+      <label>日付</label>
+      <input type="date" id="maintDate" value="${today}">
+      <label>作業内容</label>
+      <select id="maintAction">
+        <option value="再起動">再起動</option>
+        <option value="設定変更">設定変更</option>
+        <option value="URL更新">URL更新</option>
+        <option value="エラー調査">エラー調査</option>
+        <option value="新規作成">新規作成</option>
+        <option value="その他">その他</option>
+      </select>
+      <label>結果</label>
+      <select id="maintResult">
+        <option value="復旧">復旧</option>
+        <option value="未解決">未解決</option>
+        <option value="経過観察">経過観察</option>
+        <option value="廃止">廃止</option>
+      </select>
+      <label>メモ（任意）</label>
+      <textarea id="maintNotes" placeholder="作業の詳細やメモを入力..."></textarea>
+      <div class="maint-form-actions">
+        <button class="btn-cancel" id="maintCancel">キャンセル</button>
+        <button class="btn-save" id="maintSave">保存</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('.cp-close').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#maintCancel').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    overlay.querySelector('#maintSave').addEventListener('click', async () => {
+      const btn = overlay.querySelector('#maintSave');
+      btn.disabled = true; btn.textContent = '保存中...';
+      const record = {
+        crawlerId: crawlerData.id || '',
+        crawlerName: crawlerData.name || '',
+        country: crawlerData.country || '',
+        date: overlay.querySelector('#maintDate').value,
+        action: overlay.querySelector('#maintAction').value,
+        result: overlay.querySelector('#maintResult').value,
+        notes: overlay.querySelector('#maintNotes').value.trim(),
+        createdAt: Date.now(),
+        createdBy: userId || 'unknown',
+        createdByName: userName || ''
+      };
+      try {
+        await apiPost('/api/maintenance', record);
+        overlay.remove();
+        if (onSaved) onSaved();
+      } catch(e) {
+        console.error('Save error:', e);
+        alert('保存に失敗しました: ' + (e.message || ''));
+        btn.disabled = false; btn.textContent = '保存';
+      }
+    });
+  }
+
+  function showEditForm(logDoc, onSaved) {
+    const existing = document.querySelector('.maint-form-overlay');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'maint-form-overlay';
+    const actions = ['再起動','設定変更','URL更新','エラー調査','新規作成','自動検知','その他'];
+    const results = ['復旧','未解決','経過観察','廃止'];
+    overlay.innerHTML = `<div class="maint-form">
+      <button class="cp-close" style="position:absolute;top:10px;right:14px">&times;</button>
+      <h4>✏️ 記録を編集</h4>
+      <div class="maint-form-info">
+        <strong>${(logDoc.crawlerName || logDoc.crawlerId || '—').replace(/</g,'&lt;')}</strong>
+        ${logDoc.country ? ' / ' + logDoc.country : ''}
+      </div>
+      <label>日付</label>
+      <input type="date" id="maintDate" value="${logDoc.date || ''}">
+      <label>作業内容</label>
+      <select id="maintAction">
+        ${actions.map(a => '<option value="'+a+'"'+(logDoc.action===a?' selected':'')+'>'+a+'</option>').join('')}
+      </select>
+      <label>結果</label>
+      <select id="maintResult">
+        ${results.map(r => '<option value="'+r+'"'+(logDoc.result===r?' selected':'')+'>'+r+'</option>').join('')}
+      </select>
+      <label>メモ（任意）</label>
+      <textarea id="maintNotes">${(logDoc.notes || '').replace(/</g,'&lt;')}</textarea>
+      <div class="maint-form-actions">
+        <button class="btn-cancel" id="maintCancel">キャンセル</button>
+        <button class="btn-save" id="maintSave">更新</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('.cp-close').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#maintCancel').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('#maintSave').addEventListener('click', async () => {
+      const btn = overlay.querySelector('#maintSave');
+      btn.disabled = true; btn.textContent = '更新中...';
+      try {
+        await apiPut('/api/maintenance/' + logDoc.id, {
+          date: overlay.querySelector('#maintDate').value,
+          action: overlay.querySelector('#maintAction').value,
+          result: overlay.querySelector('#maintResult').value,
+          notes: overlay.querySelector('#maintNotes').value.trim()
+        });
+        overlay.remove();
+        if (onSaved) onSaved();
+      } catch(e) {
+        console.error('Update error:', e);
+        alert('更新に失敗しました: ' + (e.message || ''));
+        btn.disabled = false; btn.textContent = '更新';
+      }
+    });
+  }
+
+  async function loadCountryHistory(country, detailOverlay) {
+    const container = detailOverlay.querySelector('#detailMaintHistory');
+    if (!container) return;
+    container.innerHTML = '<h5>📋 メンテナンス履歴</h5><p class="maint-history-empty">読み込み中...</p>';
+    try {
+      const docs = await apiGet('/api/maintenance?country=' + encodeURIComponent(country) + '&limit=30');
+      if (docs.length === 0) {
+        container.innerHTML = '<h5>📋 メンテナンス履歴</h5><p class="maint-history-empty">この国の記録はまだありません</p>';
+        return;
+      }
+      let html = '<h5>📋 メンテナンス履歴 (' + docs.length + '件)</h5>';
+      docs.forEach(log => {
+        // Normalize snake_case from Postgres to camelCase
+        const crawlerName = log.crawler_name || log.crawlerName || '';
+        const crawlerId = log.crawler_id || log.crawlerId || '';
+        const autoRecovery = log.auto_recovery || log.autoRecovery || false;
+        const createdByName = log.created_by_name || log.createdByName || '';
+        const createdAt = log.created_at || log.createdAt;
+        const updatedAt = log.updated_at || log.updatedAt;
+        const resultClass = log.result === '復旧' ? 'resolved' : log.result === '未解決' ? 'unresolved' : log.result === '経過観察' ? 'monitoring' : 'retired';
+        html += `<div class="maint-log-item" style="cursor:pointer" data-logid="${log.id}" title="クリックで編集">
+          <span class="maint-date">${log.date || '—'}</span>
+          <span class="maint-action-badge">${log.action || '—'}</span>
+          <span class="maint-result-badge ${resultClass}">${log.result || '—'}</span>
+          <strong style="font-size:11px;margin-left:6px">${(crawlerName || crawlerId || '').replace(/</g,'&lt;')}</strong>
+          ${autoRecovery ? '<span style="font-size:10px;color:#065F46;margin-left:4px">🤖自動</span>' : ''}
+          ${log.notes ? '<div class="maint-notes">' + log.notes.replace(/</g,'&lt;') + '</div>' : ''}
+          <div class="maint-user">
+            ${createdByName || '—'} · ${createdAt ? new Date(createdAt).toLocaleString('ja-JP') : ''}
+            ${updatedAt ? ' (編集: ' + new Date(updatedAt).toLocaleString('ja-JP') + ')' : ''}
+            <button class="maint-delete-btn" data-id="${log.id}" title="削除" style="margin-left:8px">×</button>
+          </div>
+        </div>`;
+      });
+      container.innerHTML = html;
+
+      // Bind edit (click on card) and delete
+      container.querySelectorAll('.maint-log-item').forEach(card => {
+        const logId = card.dataset.logid;
+        const logData = docs.find(d => String(d.id) === String(logId));
+        if (!logData) return;
+        // Normalize for showEditForm
+        logData.crawlerName = logData.crawler_name || logData.crawlerName || '';
+        logData.crawlerId = logData.crawler_id || logData.crawlerId || '';
+        card.addEventListener('click', (e) => {
+          if (e.target.classList.contains('maint-delete-btn')) return;
+          showEditForm(logData, () => loadCountryHistory(country, detailOverlay));
+        });
+      });
+      container.querySelectorAll('.maint-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm('この記録を削除しますか？')) return;
+          try {
+            await apiDelete('/api/maintenance/' + btn.dataset.id);
+            loadCountryHistory(country, detailOverlay);
+          } catch(err) { alert('削除に失敗しました'); }
+        });
+      });
+    } catch(e) {
+      console.error('Load country history error:', e);
+      container.innerHTML = '<h5>📋 メンテナンス履歴</h5><p class="maint-history-empty">読み込みエラー</p>';
+    }
+  }
+
+  // Auto-recovery: when CSV is loaded, check 経過観察 crawlers whose errors are now cleared
+  async function checkAutoRecovery() {
+    if (!rawRows || !colMap.stopDays) return;
+    try {
+      // Fetch all 経過観察 records via API
+      const allLogs = await apiGet('/api/maintenance?limit=200');
+      const monitoringLogs = allLogs.filter(l => l.result === '経過観察');
+      if (monitoringLogs.length === 0) return;
+
+      // Build map of latest 経過観察 record per crawlerId/crawlerName
+      const monitoring = new Map();
+      monitoringLogs.forEach(d => {
+        const key = d.crawler_id || d.crawlerId || d.crawler_name || d.crawlerName;
+        if (key && !monitoring.has(key)) monitoring.set(key, d);
+      });
+      if (monitoring.size === 0) return;
+
+      const crawlerIdCol = headers.find(h => h.toLowerCase().includes('crawler id')) || '';
+      const nameCol = headers.find(h => h.toLowerCase().includes('organization') && h.toLowerCase().includes('original')) || '';
+      const today = new Date().toISOString().slice(0, 10);
+      let recoveredCount = 0;
+
+      for (const [key, logData] of monitoring) {
+        const matchRow = rawRows.find(r => {
+          const cid = crawlerIdCol ? (r[crawlerIdCol] || '').trim() : '';
+          const name = nameCol ? (r[nameCol] || '').trim() : '';
+          return (cid && cid === key) || (name && name === key);
+        });
+        if (!matchRow) continue;
+        const stopDays = parseInt(matchRow[colMap.stopDays]);
+        if (isNaN(stopDays) || stopDays > 0) continue; // still stopped
+
+        // Crawler was 経過観察 and is now active → auto-record 復旧
+        try {
+          await apiPost('/api/maintenance', {
+            crawlerId: logData.crawler_id || logData.crawlerId || '',
+            crawlerName: logData.crawler_name || logData.crawlerName || '',
+            country: logData.country || '',
+            date: today,
+            action: '自動検知',
+            result: '復旧',
+            notes: '経過観察中のクローラーがCSV更新時にアクティブ状態を確認。自動的に復旧記録を作成。',
+            autoRecovery: true,
+            originalLogId: logData.id
+          });
+          recoveredCount++;
+        } catch(e) { console.error('Auto-recovery save error for', key, e); }
+      }
+
+      if (recoveredCount > 0) {
+        const notif = document.createElement('div');
+        notif.style.cssText = 'position:fixed;top:20px;right:20px;background:#DEF7EC;border:3px solid #065F46;border-radius:10px;padding:12px 20px;font-size:13px;font-weight:700;color:#065F46;z-index:10002;box-shadow:4px 4px 0 #065F46;transition:opacity .5s';
+        notif.textContent = '✅ ' + recoveredCount + '件のクローラーが復旧しました（自動検知）';
+        document.body.appendChild(notif);
+        setTimeout(() => { notif.style.opacity = '0'; setTimeout(() => notif.remove(), 600); }, 4000);
+      }
+    } catch(e) { console.error('Auto-recovery check error:', e); }
+  }
+
+  async function toggleMaintenancePanel() {
+    maintPanelVisible = !maintPanelVisible;
+    const panel = document.getElementById('maintPanel');
+    if (!panel) return;
+
+    const btn = document.getElementById('maintToggleBtn');
+    if (btn) btn.className = 'maint-toggle-btn' + (maintPanelVisible ? ' active-btn' : '');
+
+    if (!maintPanelVisible) {
+      panel.style.display = 'none';
+      return;
+    }
+    panel.style.display = 'block';
+    panel.innerHTML = '<div class="maint-panel"><h3>📋 全メンテナンス履歴</h3><div class="maint-panel-loading">読み込み中...</div></div>';
+
+    if (!db) {
+      panel.innerHTML = '<div class="maint-panel"><h3>📋 全メンテナンス履歴</h3><div class="maint-panel-empty">データベースに接続できません。Artifact上で閲覧してください。</div></div>';
+      return;
+    }
+
+    try {
+      const rawDocs = await apiGet('/api/maintenance?limit=50');
+      const docs = (rawDocs || []).map(log => ({
+        ...log,
+        crawlerName: log.crawler_name || log.crawlerName || '',
+        crawlerId: log.crawler_id || log.crawlerId || '',
+        createdByName: log.created_by_name || log.createdByName || '',
+        autoRecovery: log.auto_recovery || log.autoRecovery || false,
+      }));
+
+      if (docs.length === 0) {
+        panel.innerHTML = '<div class="maint-panel"><h3>📋 全メンテナンス履歴</h3><div class="maint-panel-empty">まだ記録がありません</div></div>';
+        return;
+      }
+
+      let tableHTML = `<div class="maint-panel"><h3>📋 全メンテナンス履歴 (${docs.length}件)</h3>
+        <div style="overflow-x:auto"><table class="maint-panel-table">
+        <thead><tr><th>日付</th><th>クローラー</th><th>国</th><th>作業</th><th>結果</th><th>メモ</th><th>担当</th><th></th></tr></thead><tbody>`;
+
+      docs.forEach(log => {
+        const resultClass = log.result === '復旧' ? 'resolved' :
+          log.result === '未解決' ? 'unresolved' :
+          log.result === '経過観察' ? 'monitoring' : 'retired';
+        tableHTML += `<tr class="maint-panel-row" data-logid="${log.id}" style="cursor:pointer" title="クリックで編集">
+          <td style="white-space:nowrap;font-family:var(--mono);font-size:11px">${log.date || '—'}</td>
+          <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(log.crawlerName||'').replace(/"/g,'&quot;')}">${log.crawlerName || log.crawlerId || '—'}${log.autoRecovery ? ' 🤖' : ''}</td>
+          <td>${log.country || '—'}</td>
+          <td><span class="maint-action-badge">${log.action || '—'}</span></td>
+          <td><span class="maint-result-badge ${resultClass}">${log.result || '—'}</span></td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(log.notes||'').replace(/"/g,'&quot;')}">${log.notes ? log.notes.replace(/</g,'&lt;') : '—'}</td>
+          <td style="font-size:11px">${log.createdByName || '—'}</td>
+          <td><button class="maint-delete-btn" data-id="${log.id}" title="削除">×</button></td>
+        </tr>`;
+      });
+
+      tableHTML += '</tbody></table></div></div>';
+      panel.innerHTML = tableHTML;
+
+      // Bind edit (click on row) and delete
+      panel.querySelectorAll('.maint-panel-row').forEach(row => {
+        const logId = row.dataset.logid;
+        const logData = docs.find(d => d.id === logId);
+        if (!logData) return;
+        row.addEventListener('click', (e) => {
+          if (e.target.classList.contains('maint-delete-btn')) return;
+          showEditForm(logData, () => { maintPanelVisible = false; toggleMaintenancePanel(); });
+        });
+      });
+      panel.querySelectorAll('.maint-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const docId = btn.dataset.id;
+          if (!confirm('この記録を削除しますか？')) return;
+          try {
+            await apiDelete('/api/maintenance/' + docId);
+            maintPanelVisible = false;
+            toggleMaintenancePanel();
+          } catch(err) {
+            alert('削除に失敗しました');
+          }
+        });
+      });
+    } catch(e) {
+      console.error('Load all logs error:', e);
+      panel.innerHTML = '<div class="maint-panel"><h3>📋 全メンテナンス履歴</h3><div class="maint-panel-empty">読み込みエラー</div></div>';
+    }
+  }
+
+  render();
+
+  // Auto-recovery check after db initializes
+  setTimeout(() => { checkAutoRecovery(); }, 3000);
+}
+</script>
+</body>
+</html>
