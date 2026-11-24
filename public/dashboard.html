@@ -71,40 +71,6 @@ header p {
   font-weight: 500;
 }
 
-.drop-zone {
-  border: var(--border-w) dashed var(--border);
-  border-radius: var(--radius);
-  padding: 48px 32px;
-  text-align: center;
-  cursor: pointer;
-  transition: all .15s;
-  background: var(--surface);
-  margin-bottom: 24px;
-  box-shadow: var(--shadow);
-}
-
-.drop-zone:hover, .drop-zone.dragover {
-  background: var(--yellow-bg);
-  transform: translate(-2px, -2px);
-  box-shadow: 7px 7px 0 #222;
-}
-
-.drop-zone svg { margin-bottom: 12px; }
-
-.drop-zone h3 {
-  font-size: 18px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.drop-zone p {
-  font-size: 14px;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.drop-zone input { display: none; }
-
 .stats-bar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -1013,11 +979,8 @@ header p {
     <p>Visualize crawler status by country as a heatmap</p>
   </header>
 
-  <div class="drop-zone" id="dropZone">
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-    <h3>Drop CSV file or click to upload</h3>
-    <p>CSV with Country, Type of Organization, Stop Days columns</p>
-    <input type="file" id="fileInput" accept=".csv">
+  <div id="loadingMsg" style="text-align:center;padding:60px 20px;font-size:16px;color:#666">
+    <p>Loading crawler data...</p>
   </div>
 
   <div id="mapperSection" style="display:none"></div>
@@ -1049,32 +1012,21 @@ let headers = [];
 let colMap = { country: '', orgType: '', stopDays: '', status: '', octoAccount: '', priority: '' };
 let fileName = '';
 
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-
-dropZone.addEventListener('click', () => fileInput.click());
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropZone.classList.remove('dragover');
-  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-});
-fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
-
-// Auto-load: fetch the latest CSV from the server on page load
-(async function autoLoadLatestCSV() {
+// Load CSV data from server
+async function loadCSVData() {
+  const loadingMsg = document.getElementById('loadingMsg');
   try {
     const resp = await fetch('/api/csv-data');
-    if (!resp.ok) return;
+    if (!resp.ok) throw new Error('Failed to fetch');
     const json = await resp.json();
-    if (!json.data || !json.data.csv_content) return;
+    if (!json.data || !json.data.csv_content) throw new Error('No data');
 
     const saved = json.data;
     let text = saved.csv_content;
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    _lastCsvText = text;
     const lines = parseCSV(text);
-    if (lines.length < 2) return;
+    if (lines.length < 2) throw new Error('Empty CSV');
 
     headers = lines[0].map(h => h.trim());
     rawRows = lines.slice(1).map(l => {
@@ -1082,27 +1034,32 @@ fileInput.addEventListener('change', e => { if (e.target.files.length) handleFil
       headers.forEach((h, i) => obj[h] = (l[i] || '').trim());
       return obj;
     });
-    fileName = saved.file_name || 'Previously uploaded CSV';
+    fileName = saved.file_name || 'Crawler Data';
 
-    // Restore saved column mapping if available, otherwise auto-detect
     if (saved.col_map && typeof saved.col_map === 'object' && saved.col_map.country) {
       colMap = saved.col_map;
     } else {
       autoDetectColumns();
     }
 
+    if (loadingMsg) loadingMsg.style.display = 'none';
+
     if (colMap.country && colMap.stopDays) {
-      // Skip mapper, go straight to dashboard
-      dropZone.style.display = 'none';
       buildDashboard();
     } else {
       autoDetectColumns();
       showMapper();
     }
   } catch (e) {
-    console.log('No saved CSV data, showing upload UI');
+    console.log('No saved CSV data:', e.message);
+    if (loadingMsg) {
+      loadingMsg.innerHTML = '<p style="color:var(--red);font-weight:600">No crawler data found.</p><p style="font-size:14px;margin-top:8px">Upload CSV data via the API first.</p>';
+    }
   }
-})();
+}
+
+// Auto-load on page load
+loadCSVData();
 
 function parseCSV(text) {
   const rows = [];
@@ -1170,7 +1127,8 @@ function autoDetectColumns() {
 }
 
 function showMapper() {
-  dropZone.style.display = 'none';
+  const loadingMsg = document.getElementById('loadingMsg');
+  if (loadingMsg) loadingMsg.style.display = 'none';
   const sec = document.getElementById('mapperSection');
   sec.style.display = 'block';
   const opts = h => headers.map(col => `<option value="${col}" ${col === h ? 'selected' : ''}>${col}</option>`).join('');
@@ -1237,14 +1195,15 @@ function buildDashboard() {
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       <span class="filename">${fileName}</span>
       <span class="meta">${rawRows.length} rows</span>
-      <button class="reset-btn" id="resetBtn">Reset</button>
+      <button class="reset-btn" id="updateBtn" title="Reload latest CSV data from server">🔄 Update Data</button>
     </div>
   `;
-  document.getElementById('resetBtn').addEventListener('click', () => {
+  document.getElementById('updateBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('updateBtn');
+    btn.disabled = true; btn.textContent = '⏳ Updating...';
     fileInfoSec.style.display = 'none';
     document.getElementById('dashboard').style.display = 'none';
-    dropZone.style.display = '';
-    fileInput.value = '';
+    await loadCSVData();
   });
 
   const orgTypes = new Set();
