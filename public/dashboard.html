@@ -2677,7 +2677,7 @@ function buildDashboard() {
 
     panel.innerHTML = '<div class="maint-panel"><h3>📋 All Maintenance History</h3><div class="maint-panel-loading">Loading...</div></div>';
 
-    if (!db) {
+    if (!dbReady) {
       panel.innerHTML = '<div class="maint-panel"><h3>📋 All Maintenance History</h3><div class="maint-panel-empty">Cannot connect to database.</div></div>';
       return;
     }
